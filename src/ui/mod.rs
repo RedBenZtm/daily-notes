@@ -16,7 +16,6 @@ pub mod window;
 /// Both the in-tree directory (so a build tree looks right without installing)
 /// and the XDG one the install step writes to.
 pub fn init_icons() {
-    use gtk::prelude::*;
     let Some(display) = gtk::gdk::Display::default() else {
         return;
     };
