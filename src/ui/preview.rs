@@ -73,6 +73,13 @@ impl Preview {
         l.set_wrap(true);
         l.set_wrap_mode(gtk::pango::WrapMode::WordChar);
         l.set_selectable(true);
+        // set_selectable() also turns focusable on, and a GtkLabel selects all
+        // of its text the moment it takes focus. That made the rendered view a
+        // field of focus targets: whenever focus had to move — leaving the
+        // editor, switching day — GTK handed it to the first label and lit up
+        // its text. Selection by mouse is unaffected; the two properties are
+        // independent.
+        l.set_focusable(false);
         l.connect_activate_link(|label, uri| open_link(label, uri));
         l
     }

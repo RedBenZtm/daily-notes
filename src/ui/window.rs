@@ -336,19 +336,14 @@ impl MainWindow {
     }
 
     fn focus_current_mode(self: &Rc<Self>) {
+        // Only the editor asks for focus: pressing `e` means "let me type".
+        // Showing the rendered view deliberately leaves focus to GTK, so the
+        // shortcut and the toggle button behave identically — clicking the
+        // button focuses it without a focus ring, which grab_focus() from code
+        // cannot reproduce anyway. Nothing in the rendered view can steal
+        // focus now that its labels are not focusable.
         if self.view_stack.visible_child_name().as_deref() == Some("edit") {
             self.view.grab_focus();
-        } else {
-            // Focus the mode toggle, which is exactly where focus lands when
-            // the button is clicked — so the shortcut and the button leave the
-            // window in the same state.
-            //
-            // It also has to go *somewhere* definite: the rendered view is
-            // built from selectable labels, and a GtkLabel selects all of its
-            // text the moment it takes focus. Leaving focus unset was not
-            // enough, because GTK then hands it to the first focusable widget
-            // on the next interaction — a label.
-            self.modes.grab_focus();
         }
     }
 
