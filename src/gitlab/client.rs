@@ -63,11 +63,14 @@ struct UserRec {
 
 /// Used by the main-project picker in Settings.
 #[allow(dead_code)]
-#[derive(Debug, Deserialize)]
-pub struct ProjectRec {
-    pub id: u64,
-    pub path_with_namespace: String,
-    pub name_with_namespace: String,
+/// Just enough of an issue to offer it as a completion.
+#[derive(Debug, Clone, Deserialize)]
+pub struct IssueBrief {
+    pub iid: u64,
+    pub title: String,
+    #[serde(default)]
+    pub state: String,
+    #[serde(default)]
     pub web_url: String,
 }
 
@@ -190,11 +193,25 @@ impl Client {
         }
     }
 
-    #[allow(dead_code)]
-    pub async fn search_projects(&self, query: &str) -> Result<Vec<ProjectRec>> {
-        let q = encode_path(query);
-        let path = format!("projects?membership=true&search={q}&per_page=20&order_by=last_activity_at");
-        Ok(self.get::<Vec<ProjectRec>>(&path).await?.unwrap_or_default())
+    /// Open issues of a project, newest first, for `#` completion.
+    ///
+    /// Paged rather than a single request: a busy project has far more than
+    /// one page, and completing only the newest 20 would be useless.
+    pub async fn open_issues(&self, project: &str, pages: usize) -> Result<Vec<IssueBrief>> {
+        let mut out = Vec::new();
+        for page in 1..=pages {
+            let path = format!(
+                "projects/{}/issues?state=opened&per_page=100&page={page}&order_by=updated_at",
+                encode_path(project)
+            );
+            let batch = self.get::<Vec<IssueBrief>>(&path).await?.unwrap_or_default();
+            let done = batch.len() < 100;
+            out.extend(batch);
+            if done {
+                break;
+            }
+        }
+        Ok(out)
     }
 
     /// Resolves one reference. `Ok(None)` means "no such thing", which is not

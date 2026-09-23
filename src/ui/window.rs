@@ -40,6 +40,7 @@ pub struct MainWindow {
     /// "preview" or "edit".
     view_stack: gtk::Stack,
     modes: adw::ToggleGroup,
+    on_sync_issues: RefCell<Option<Box<dyn Fn()>>>,
 }
 
 impl MainWindow {
@@ -197,10 +198,23 @@ impl MainWindow {
             preview,
             view_stack,
             modes,
+            on_sync_issues: RefCell::new(None),
         });
 
         let decorator = crate::ui::refs::RefDecorator::new(&view, &this.buffer, this.store.clone());
         *this.refs.borrow_mut() = Some(decorator);
+
+        // `#` offers the project's open issues, the way GitLab's comment box
+        // does. Served from the local cache so typing never waits on the API.
+        {
+            use sourceview5::prelude::*;
+            let provider = crate::ui::completion::IssueCompletion::new(this.store.clone());
+            {
+                let s = this.clone();
+                provider.connect_query(move || s.request_issue_sync());
+            }
+            this.view.completion().add_provider(&provider);
+        }
 
         {
             let s = this.clone();
@@ -590,6 +604,17 @@ impl MainWindow {
             d.connect_resolve(move |needed| f(needed));
         }
         self.preview.connect_resolve_refs(move |needed| f(needed));
+    }
+
+    /// Asks for the issue list to be refreshed, at most occasionally.
+    fn request_issue_sync(self: &Rc<Self>) {
+        if let Some(cb) = self.on_sync_issues.borrow().as_ref() {
+            cb();
+        }
+    }
+
+    pub fn connect_sync_issues(self: &Rc<Self>, f: impl Fn() + 'static) {
+        *self.on_sync_issues.borrow_mut() = Some(Box::new(f));
     }
 
     /// Keeps the tray menu in step with what was just written.

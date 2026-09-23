@@ -1,3 +1,4 @@
+pub mod completion;
 pub mod dates;
 pub mod editor;
 pub mod lines;

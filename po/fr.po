@@ -39,7 +39,7 @@ msgid "Open in window"
 msgstr "Ouvrir dans une fenêtre"
 
 #: src/tray/mod.rs:213 src/tray/mod.rs:232 src/ui/quicknote.rs:41
-#: src/ui/window.rs:53 src/ui/window.rs:175
+#: src/ui/window.rs:54 src/ui/window.rs:176
 msgid "Daily Notes"
 msgstr "Notes quotidiennes"
 
@@ -66,6 +66,10 @@ msgstr "Paramètres"
 msgid "Quit"
 msgstr "Quitter"
 
+#: src/ui/completion.rs:91
+msgid "Issues"
+msgstr "Tickets"
+
 #: src/ui/preview.rs:95
 msgid "Nothing written yet"
 msgstr "Rien d’écrit pour l’instant"
@@ -87,7 +91,7 @@ msgstr "Dernier jour ouvré"
 msgid "Open"
 msgstr "Ouvrir"
 
-#: src/ui/quicknote.rs:281 src/ui/window.rs:60 src/ui/window.rs:436
+#: src/ui/quicknote.rs:281 src/ui/window.rs:61 src/ui/window.rs:450
 msgid "Today"
 msgstr "Aujourd’hui"
 
@@ -231,50 +235,50 @@ msgstr "Connecté, mais ce jeton ne voit pas {}"
 msgid "Connection failed"
 msgstr "Échec de la connexion"
 
-#: src/ui/window.rs:57
+#: src/ui/window.rs:58
 msgid "Previous day"
 msgstr "Jour précédent"
 
-#: src/ui/window.rs:59
+#: src/ui/window.rs:60
 msgid "Next day"
 msgstr "Jour suivant"
 
-#: src/ui/window.rs:99
+#: src/ui/window.rs:100
 msgid "Recent days"
 msgstr "Jours récents"
 
-#: src/ui/window.rs:110
+#: src/ui/window.rs:111
 msgid "Search all notes…"
 msgstr "Rechercher dans toutes les notes…"
 
 #. Translators: {} is a key combination, shown literally.
-#: src/ui/window.rs:137
+#: src/ui/window.rs:138
 msgid "Rendered view ({})"
 msgstr "Vue rendue ({})"
 
 #. Translators: {} is a keyboard key, shown literally.
-#: src/ui/window.rs:145
+#: src/ui/window.rs:146
 msgid "Edit ({})"
 msgstr "Modifier ({})"
 
-#: src/ui/window.rs:151
+#: src/ui/window.rs:152
 msgid "Search all notes"
 msgstr "Rechercher dans toutes les notes"
 
-#: src/ui/window.rs:511
+#: src/ui/window.rs:525
 msgid "Type to search your notes."
 msgstr "Saisissez pour rechercher dans vos notes."
 
-#: src/ui/window.rs:523
+#: src/ui/window.rs:537
 msgid "Search failed."
 msgstr "Échec de la recherche."
 
-#: src/ui/window.rs:532
+#: src/ui/window.rs:546
 msgid "No notes match “{}”."
 msgstr "Aucune note ne correspond à « {} »."
 
 #. Translators: {} is the number of search results.
-#: src/ui/window.rs:539
+#: src/ui/window.rs:553
 msgid "{} result"
 msgid_plural "{} results"
 msgstr[0] "{} résultat"

@@ -6,7 +6,7 @@
 //! --quick-note` stand up a rival tray and a second database handle before
 //! discovering it should have forwarded its arguments instead.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use anyhow::Result;
@@ -117,6 +117,10 @@ struct Session {
     /// The GitLab token, read from the keyring on this thread and cached.
     /// The resolver must never read it itself — see `ResolveBatch`.
     token: RefCell<Option<String>>,
+    /// Asks for the issue list behind `#` completion to be refreshed.
+    issues_tx: async_channel::Sender<ResolveBatch>,
+    /// When it was last refreshed, so typing does not hammer the API.
+    issues_synced: Cell<Option<std::time::Instant>>,
 }
 
 impl Session {
@@ -128,6 +132,10 @@ impl Session {
         {
             let s = self.clone();
             w.connect_resolve_refs(move |needed| s.request_resolve(needed));
+        }
+        {
+            let s = self.clone();
+            w.connect_sync_issues(move || s.sync_issues());
         }
         *self.main_window.borrow_mut() = Some(w.clone());
         w
@@ -190,12 +198,39 @@ impl Session {
             let s = self.clone();
             settings.connect_saved(move || {
                 s.reload_token();
+                s.issues_synced.set(None);
                 if let Some(w) = s.main_window.borrow().as_ref() {
                     w.refresh_refs();
                 }
             });
         }
         settings.dialog.present(Some(parent));
+    }
+
+    /// Refreshes the issue list behind `#` completion, at most every few
+    /// minutes — it is requested on every keystroke after a `#`.
+    fn sync_issues(&self) {
+        const EVERY: std::time::Duration = std::time::Duration::from_secs(300);
+        if let Some(last) = self.issues_synced.get() {
+            if last.elapsed() < EVERY {
+                return;
+            }
+        }
+        let cfg = crate::config::load();
+        let Some(token) = self.token.borrow().clone() else {
+            return;
+        };
+        if !cfg.gitlab.is_configured() {
+            return;
+        }
+        self.issues_synced.set(Some(std::time::Instant::now()));
+        let _ = self.issues_tx.force_send(ResolveBatch {
+            refs: Vec::new(),
+            base: cfg.gitlab.base().to_string(),
+            token,
+            main_project: cfg.gitlab.main_project.clone(),
+            main_group: cfg.gitlab.main_group.clone(),
+        });
     }
 
     /// Records which section a day belongs to, so the tray menu reopens there.
@@ -342,6 +377,11 @@ fn start_session(app: &adw::Application) -> Result<Rc<Session>> {
     // GTK -> tokio: references to look up. tokio -> GTK: what they resolved to.
     let (resolve_tx, resolve_rx) = async_channel::unbounded::<ResolveBatch>();
     let (resolved_tx, resolved_rx) = async_channel::unbounded::<Vec<Resolution>>();
+    // Issue list for `#` completion: a request carries the same context a
+    // resolve does, and comes back as a whole replacement list.
+    let (issues_tx, issues_rx) = async_channel::unbounded::<ResolveBatch>();
+    let (issues_done_tx, issues_done_rx) =
+        async_channel::unbounded::<(String, Vec<crate::gitlab::client::IssueBrief>)>();
 
     // A tray app is normally ended by the session manager or a `kill`, not by
     // closing a window — so the debounced save has to survive a signal too.
@@ -430,6 +470,27 @@ fn start_session(app: &adw::Application) -> Result<Rc<Session>> {
         }
     });
 
+    rt.spawn(async move {
+        while let Ok(req) = issues_rx.recv().await {
+            let client = match Client::new(&req.base, &req.token) {
+                Ok(c) => c,
+                Err(e) => {
+                    tracing::warn!(?e, "could not build the GitLab client");
+                    continue;
+                }
+            };
+            // Three pages is plenty to complete against without turning a
+            // keystroke into a long sync on a project with hundreds of issues.
+            match client.open_issues(&req.main_project, 3).await {
+                Ok(issues) => {
+                    tracing::debug!(count = issues.len(), project = %req.main_project, "issue list refreshed");
+                    let _ = issues_done_tx.force_send((req.main_project, issues));
+                }
+                Err(e) => tracing::warn!(?e, "could not list issues"),
+            }
+        }
+    });
+
     let session = Rc::new(Session {
         store: Rc::new(RefCell::new(store)),
         link: TrayLink { rt, handle },
@@ -438,6 +499,8 @@ fn start_session(app: &adw::Application) -> Result<Rc<Session>> {
         hold: RefCell::new(None),
         resolve_tx,
         token: RefCell::new(None),
+        issues_tx,
+        issues_synced: Cell::new(None),
     });
     session.reload_token();
     session.link.push(snapshot(&session.store.borrow()));
@@ -451,6 +514,17 @@ fn start_session(app: &adw::Application) -> Result<Rc<Session>> {
             let _ = tx.force_send(TrayCommand::QuickNote);
         });
         app.add_action(&action);
+    }
+
+    {
+        let s = session.clone();
+        glib::spawn_future_local(async move {
+            while let Ok((project, issues)) = issues_done_rx.recv().await {
+                if let Err(e) = s.store.borrow_mut().put_issues(&project, &issues) {
+                    tracing::warn!(?e, "could not store the issue list");
+                }
+            }
+        });
     }
 
     // Fold resolved references into the cache and repaint.

@@ -84,6 +84,18 @@ const MIGRATIONS: &[&str] = &[
 
     CREATE TABLE meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
     "#,
+    // v2 — the issue list behind `#` completion in the editor.
+    r#"
+    CREATE TABLE gl_issues (
+      project TEXT NOT NULL,
+      iid     INTEGER NOT NULL,
+      title   TEXT NOT NULL,
+      state   TEXT NOT NULL,
+      web_url TEXT NOT NULL,
+      PRIMARY KEY (project, iid)
+    );
+    CREATE INDEX gl_issues_title ON gl_issues(project, title);
+    "#,
 ];
 
 pub fn migrate(conn: &Connection) -> Result<()> {

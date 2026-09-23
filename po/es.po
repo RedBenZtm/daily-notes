@@ -39,7 +39,7 @@ msgid "Open in window"
 msgstr "Abrir en una ventana"
 
 #: src/tray/mod.rs:213 src/tray/mod.rs:232 src/ui/quicknote.rs:41
-#: src/ui/window.rs:53 src/ui/window.rs:175
+#: src/ui/window.rs:54 src/ui/window.rs:176
 msgid "Daily Notes"
 msgstr "Notas diarias"
 
@@ -66,6 +66,10 @@ msgstr "Preferencias"
 msgid "Quit"
 msgstr "Salir"
 
+#: src/ui/completion.rs:91
+msgid "Issues"
+msgstr "Incidencias"
+
 #: src/ui/preview.rs:95
 msgid "Nothing written yet"
 msgstr "Todavía no hay nada escrito"
@@ -87,7 +91,7 @@ msgstr "Último día laborable"
 msgid "Open"
 msgstr "Abrir"
 
-#: src/ui/quicknote.rs:281 src/ui/window.rs:60 src/ui/window.rs:436
+#: src/ui/quicknote.rs:281 src/ui/window.rs:61 src/ui/window.rs:450
 msgid "Today"
 msgstr "Hoy"
 
@@ -231,50 +235,50 @@ msgstr "Conectado, pero este token no puede ver {}"
 msgid "Connection failed"
 msgstr "Error de conexión"
 
-#: src/ui/window.rs:57
+#: src/ui/window.rs:58
 msgid "Previous day"
 msgstr "Día anterior"
 
-#: src/ui/window.rs:59
+#: src/ui/window.rs:60
 msgid "Next day"
 msgstr "Día siguiente"
 
-#: src/ui/window.rs:99
+#: src/ui/window.rs:100
 msgid "Recent days"
 msgstr "Días recientes"
 
-#: src/ui/window.rs:110
+#: src/ui/window.rs:111
 msgid "Search all notes…"
 msgstr "Buscar en todas las notas…"
 
 #. Translators: {} is a key combination, shown literally.
-#: src/ui/window.rs:137
+#: src/ui/window.rs:138
 msgid "Rendered view ({})"
 msgstr "Vista renderizada ({})"
 
 #. Translators: {} is a keyboard key, shown literally.
-#: src/ui/window.rs:145
+#: src/ui/window.rs:146
 msgid "Edit ({})"
 msgstr "Editar ({})"
 
-#: src/ui/window.rs:151
+#: src/ui/window.rs:152
 msgid "Search all notes"
 msgstr "Buscar en todas las notas"
 
-#: src/ui/window.rs:511
+#: src/ui/window.rs:525
 msgid "Type to search your notes."
 msgstr "Escribe para buscar en tus notas."
 
-#: src/ui/window.rs:523
+#: src/ui/window.rs:537
 msgid "Search failed."
 msgstr "Error en la búsqueda."
 
-#: src/ui/window.rs:532
+#: src/ui/window.rs:546
 msgid "No notes match “{}”."
 msgstr "Ninguna nota coincide con «{}»."
 
 #. Translators: {} is the number of search results.
-#: src/ui/window.rs:539
+#: src/ui/window.rs:553
 msgid "{} result"
 msgid_plural "{} results"
 msgstr[0] "{} resultado"

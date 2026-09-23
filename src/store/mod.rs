@@ -106,6 +106,61 @@ impl Store {
         search::keyword(&self.conn, query, limit)
     }
 
+    /// Replaces the cached issue list for a project.
+    pub fn put_issues(&mut self, project: &str, issues: &[crate::gitlab::client::IssueBrief]) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        tx.execute("DELETE FROM gl_issues WHERE project = ?1", rusqlite::params![project])?;
+        {
+            let mut stmt = tx.prepare(
+                "INSERT INTO gl_issues(project, iid, title, state, web_url)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+            )?;
+            for i in issues {
+                stmt.execute(rusqlite::params![
+                    project,
+                    i.iid as i64,
+                    i.title,
+                    i.state,
+                    i.web_url
+                ])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Issues matching what has been typed after `#`.
+    ///
+    /// An all-digit query is an issue number being typed, so number matches
+    /// come first; otherwise it is a title search.
+    pub fn complete_issues(
+        &self,
+        project: &str,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<(u64, String, String)>> {
+        let like = format!("%{query}%");
+        let prefix = format!("{query}%");
+        let mut stmt = self.conn.prepare(
+            "SELECT iid, title, state FROM gl_issues
+             WHERE project = ?1
+               AND (?2 = '' OR CAST(iid AS TEXT) LIKE ?3 OR title LIKE ?4)
+             ORDER BY (CAST(iid AS TEXT) LIKE ?3) DESC, iid DESC
+             LIMIT ?5",
+        )?;
+        let rows = stmt.query_map(
+            rusqlite::params![project, query, prefix, like, limit as i64],
+            |r| {
+                Ok((
+                    r.get::<_, i64>(0)? as u64,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                ))
+            },
+        )?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
     pub fn ref_cache_get(&self, key: &str) -> Result<Option<crate::gitlab::cache::Entry>> {
         crate::gitlab::cache::get(&self.conn, key)
     }
@@ -247,6 +302,36 @@ mod tests {
 
         s.ref_cache_clear().unwrap();
         assert!(s.ref_cache_get("issue:g/p:1").unwrap().is_none());
+    }
+
+    #[test]
+    fn issue_completion_ranks_numbers_before_titles() {
+        use crate::gitlab::client::IssueBrief;
+        let mut s = Store::open_in_memory().unwrap();
+        let issues = vec![
+            IssueBrief { iid: 89, title: "Unrelated".into(), state: "opened".into(), web_url: "u".into() },
+            IssueBrief { iid: 890, title: "Cleanup Daten CMS".into(), state: "opened".into(), web_url: "u".into() },
+            IssueBrief { iid: 12, title: "Number 89 in the title".into(), state: "opened".into(), web_url: "u".into() },
+        ];
+        s.put_issues("g/p", &issues).unwrap();
+
+        // typing digits: issue numbers first, but title matches still offered
+        let hits = s.complete_issues("g/p", "89", 10).unwrap();
+        assert_eq!(hits[0].0, 890);
+        assert_eq!(hits[1].0, 89);
+        assert!(hits.iter().any(|h| h.0 == 12));
+
+        // typing words: title search
+        let hits = s.complete_issues("g/p", "cleanup", 10).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].0, 890);
+
+        // an empty query offers the most recent
+        assert_eq!(s.complete_issues("g/p", "", 10).unwrap().len(), 3);
+
+        // replacing the list drops what is gone
+        s.put_issues("g/p", &issues[..1]).unwrap();
+        assert_eq!(s.complete_issues("g/p", "", 10).unwrap().len(), 1);
     }
 
     #[test]
