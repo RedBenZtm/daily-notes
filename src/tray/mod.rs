@@ -144,38 +144,35 @@ impl DailyNotesTray {
             );
         }
 
-        items.push(
-            StandardItem {
-                label: gettext("Open in window"),
-                activate: Box::new(move |t: &mut Self| {
-                    t.send(TrayCommand::OpenDay(date, None));
-                }),
-                ..Default::default()
-            }
-            .into(),
-        );
         items
     }
 
-    /// A day listed inline, under a heading that is not itself clickable.
+    /// A day listed inline, under a heading that opens it in the window.
+    ///
+    /// The heading carries the action rather than a separate row below the
+    /// entries. A dbusmenu item is an icon plus a label and nothing else —
+    /// there is no trailing widget — so the icon sits where the protocol puts
+    /// icons, on the left.
     fn day_inline(&self, label: &str, date: Option<NaiveDate>, entries: &[Entry]) -> Vec<MenuItem<Self>> {
+        let Some(date) = date else {
+            return vec![StandardItem {
+                label: label.into(),
+                enabled: false,
+                ..Default::default()
+            }
+            .into()];
+        };
+
         let mut out: Vec<MenuItem<Self>> = vec![StandardItem {
             label: label.into(),
-            enabled: false,
+            icon_name: "window-new-symbolic".into(),
+            activate: Box::new(move |t: &mut Self| {
+                t.send(TrayCommand::OpenDay(date, None));
+            }),
             ..Default::default()
         }
         .into()];
-        match date {
-            Some(date) => out.extend(self.day_items(date, entries)),
-            None => out.push(
-                StandardItem {
-                    label: gettext("(no entries)"),
-                    enabled: false,
-                    ..Default::default()
-                }
-                .into(),
-            ),
-        }
+        out.extend(self.day_items(date, entries));
         out
     }
 
@@ -189,9 +186,26 @@ impl DailyNotesTray {
             .into();
         };
 
+        // A submenu's own label opens the submenu, so it cannot double as the
+        // "open this day" action the inline heading carries. This one keeps a
+        // row of its own.
+        let mut items = self.day_items(date, entries);
+        items.push(MenuItem::Separator);
+        items.push(
+            StandardItem {
+                label: gettext("Open in window"),
+                icon_name: "window-new-symbolic".into(),
+                activate: Box::new(move |t: &mut Self| {
+                    t.send(TrayCommand::OpenDay(date, None));
+                }),
+                ..Default::default()
+            }
+            .into(),
+        );
+
         SubMenu {
             label: label.into(),
-            submenu: self.day_items(date, entries),
+            submenu: items,
             ..Default::default()
         }
         .into()
