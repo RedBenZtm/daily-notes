@@ -1,82 +1,91 @@
 
 #. Translators: tray submenu, {} is a date like "Wed 23 Sep".
-#: src/app.rs:81
+#: src/app.rs:91
 msgid "Today · {}"
 msgstr ""
 
 #. Translators: tray submenu, {} is a date like "Tue 22 Sep".
-#: src/app.rs:86
+#: src/app.rs:96
 msgid "Last workday · {}"
 msgstr ""
 
-#: src/app.rs:87 src/ui/quicknote.rs:507
+#: src/app.rs:97 src/ui/quicknote.rs:467
 msgid "No earlier notes"
 msgstr ""
 
-#: src/tray/mod.rs:115
+#: src/tray/mod.rs:139 src/tray/mod.rs:172
 msgid "(no entries)"
 msgstr ""
 
-#: src/tray/mod.rs:126
+#: src/tray/mod.rs:149
 msgid "Open in window"
 msgstr ""
 
-#: src/tray/mod.rs:156 src/tray/mod.rs:175 src/ui/quicknote.rs:40 src/ui/window.rs:49 src/ui/window.rs:142
+#: src/tray/mod.rs:213 src/tray/mod.rs:232 src/ui/quicknote.rs:41 src/ui/window.rs:53 src/ui/window.rs:174
 msgid "Daily Notes"
 msgstr ""
 
 #. Translators: {} is the number of note entries written today.
-#: src/tray/mod.rs:177
+#: src/tray/mod.rs:234
 msgid "{} entry today"
 msgid_plural "{} entries today"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/tray/mod.rs:198 src/ui/quicknote.rs:105
+#: src/tray/mod.rs:255 src/ui/quicknote.rs:106
 msgid "Quick Note"
 msgstr ""
 
-#: src/tray/mod.rs:208 src/ui/quicknote.rs:54
+#: src/tray/mod.rs:282 src/ui/quicknote.rs:55
 msgid "Search…"
 msgstr ""
 
-#: src/tray/mod.rs:214 src/ui/settings.rs:112
+#: src/tray/mod.rs:288 src/ui/settings.rs:112
 msgid "Settings"
 msgstr ""
 
-#: src/tray/mod.rs:221
+#: src/tray/mod.rs:295
 msgid "Quit"
 msgstr ""
 
-#: src/ui/quicknote.rs:48
+#: src/ui/preview.rs:88
+msgid "Nothing written yet"
+msgstr ""
+
+#. Translators: {} is a keyboard key, shown literally.
+#: src/ui/preview.rs:90
+msgid "Press {} to start writing."
+msgstr ""
+
+#: src/ui/quicknote.rs:49
 msgid "Add an entry…"
 msgstr ""
 
-#: src/ui/quicknote.rs:53
+#: src/ui/quicknote.rs:54
 msgid "Last workday"
 msgstr ""
 
-#: src/ui/quicknote.rs:55
+#: src/ui/quicknote.rs:56
 msgid "Open"
 msgstr ""
 
-#: src/ui/quicknote.rs:315 src/ui/window.rs:56 src/ui/window.rs:290
+#: src/ui/quicknote.rs:281 src/ui/window.rs:60 src/ui/window.rs:398
 msgid "Today"
 msgstr ""
 
-#: src/ui/quicknote.rs:327
+#: src/ui/quicknote.rs:293
 msgid "Nothing yet today"
 msgstr ""
 
-#: src/ui/quicknote.rs:328
+#: src/ui/quicknote.rs:294
 msgid "Type below to add your first entry."
 msgstr ""
 
-#: src/ui/quicknote.rs:351
+#: src/ui/quicknote.rs:317
 msgid "Drag to reorder"
 msgstr ""
 
-#: src/ui/quicknote.rs:373
+#: src/ui/quicknote.rs:330
 msgid "Delete entry"
 msgstr ""
 
@@ -192,40 +201,49 @@ msgstr ""
 msgid "Connection failed"
 msgstr ""
 
-#: src/ui/window.rs:53
+#: src/ui/window.rs:57
 msgid "Previous day"
 msgstr ""
 
-#: src/ui/window.rs:55
+#: src/ui/window.rs:59
 msgid "Next day"
 msgstr ""
 
-#: src/ui/window.rs:95
+#: src/ui/window.rs:99
 msgid "Recent days"
 msgstr ""
 
-#: src/ui/window.rs:106
+#: src/ui/window.rs:110
 msgid "Search all notes…"
 msgstr ""
 
-#: src/ui/window.rs:119
+#: src/ui/window.rs:136
+msgid "Rendered view"
+msgstr ""
+
+#. Translators: {} is a keyboard key, shown literally.
+#: src/ui/window.rs:144
+msgid "Edit ({})"
+msgstr ""
+
+#: src/ui/window.rs:150
 msgid "Search all notes"
 msgstr ""
 
-#: src/ui/window.rs:362
+#: src/ui/window.rs:473
 msgid "Type to search your notes."
 msgstr ""
 
-#: src/ui/window.rs:374
+#: src/ui/window.rs:485
 msgid "Search failed."
 msgstr ""
 
-#: src/ui/window.rs:383
+#: src/ui/window.rs:494
 msgid "No notes match “{}”."
 msgstr ""
 
 #. Translators: {} is the number of search results.
-#: src/ui/window.rs:390
+#: src/ui/window.rs:501
 msgid "{} result"
 msgid_plural "{} results"
 msgstr[0] ""

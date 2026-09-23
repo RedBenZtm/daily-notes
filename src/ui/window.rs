@@ -10,7 +10,7 @@ use gtk::glib;
 use crate::i18n::gettext;
 use crate::app::TrayLink;
 use crate::store::Store;
-use crate::ui::{dates, editor};
+use crate::ui::{dates, editor, preview::Preview};
 
 /// How long the editor sits idle before the day is written back.
 const SAVE_DEBOUNCE_MS: u32 = 600;
@@ -36,6 +36,10 @@ pub struct MainWindow {
     /// Debounces the query so each keystroke does not hit SQLite.
     pending_search: Rc<RefCell<Option<glib::SourceId>>>,
     refs: RefCell<Option<Rc<crate::ui::refs::RefDecorator>>>,
+    preview: Rc<Preview>,
+    /// "preview" or "edit".
+    view_stack: gtk::Stack,
+    modes: adw::ToggleGroup,
 }
 
 impl MainWindow {
@@ -114,10 +118,38 @@ impl MainWindow {
             .vexpand(true)
             .child(&view)
             .build();
+
+        let preview = Preview::new(store.clone());
+        let view_stack = gtk::Stack::new();
+        view_stack.set_transition_type(gtk::StackTransitionType::Crossfade);
+        view_stack.set_transition_duration(80);
+        view_stack.add_named(&preview.scroll, Some("preview"));
+        view_stack.add_named(&editor_scroll, Some("edit"));
+        view_stack.set_visible_child_name("preview");
+
+        // A segmented control, the way an editor offers preview vs source.
+        let modes = adw::ToggleGroup::new();
+        modes.add(
+            adw::Toggle::builder()
+                .name("preview")
+                .icon_name("view-reveal-symbolic")
+                .tooltip(gettext("Rendered view"))
+                .build(),
+        );
+        modes.add(
+            adw::Toggle::builder()
+                .name("edit")
+                .icon_name("document-edit-symbolic")
+                // Translators: {} is a keyboard key, shown literally.
+                .tooltip(gettext("Edit ({})").replace("{}", "E"))
+                .build(),
+        );
+        modes.add_css_class("flat");
         let search_toggle = gtk::ToggleButton::new();
         search_toggle.set_icon_name("system-search-symbolic");
         search_toggle.set_tooltip_text(Some(&gettext("Search all notes")));
         header.pack_end(&search_toggle);
+        header.pack_end(&modes);
         search_toggle
             .bind_property("active", &search_bar, "search-mode-enabled")
             .bidirectional()
@@ -127,7 +159,7 @@ impl MainWindow {
         let content = adw::ToolbarView::new();
         content.add_top_bar(&header);
         content.add_top_bar(&search_bar);
-        content.set_content(Some(&editor_scroll));
+        content.set_content(Some(&view_stack));
 
         let split = adw::OverlaySplitView::builder()
             .sidebar(&sidebar_page)
@@ -161,10 +193,44 @@ impl MainWindow {
             results_status,
             pending_search: Rc::new(RefCell::new(None)),
             refs: RefCell::new(None),
+            preview,
+            view_stack,
+            modes,
         });
 
         let decorator = crate::ui::refs::RefDecorator::new(&view, &this.buffer, this.store.clone());
         *this.refs.borrow_mut() = Some(decorator);
+
+        {
+            let s = this.clone();
+            this.modes.connect_active_notify(move |g| {
+                let name = if g.active() == 0 { "preview" } else { "edit" };
+                s.set_mode(name);
+            });
+        }
+        {
+            let s = this.clone();
+            this.preview.connect_edit_requested(move || s.set_mode("edit"));
+        }
+
+        // `e` opens the editor. Safe as a bare key: the rendered view has
+        // nowhere to type, and the shortcut lives on it rather than on the
+        // window, so it cannot fire while editing or while searching.
+        let keys = gtk::EventControllerKey::new();
+        {
+            let s = this.clone();
+            keys.connect_key_pressed(move |_, key, _, state| {
+                let plain = !state.intersects(
+                    gtk::gdk::ModifierType::CONTROL_MASK | gtk::gdk::ModifierType::ALT_MASK,
+                );
+                if plain && matches!(key, gtk::gdk::Key::e | gtk::gdk::Key::E) {
+                    s.set_mode("edit");
+                    return glib::Propagation::Stop;
+                }
+                glib::Propagation::Proceed
+            });
+        }
+        this.preview.scroll.add_controller(keys);
 
         search_bar.set_key_capture_widget(Some(&this.window));
         this.connect_signals(&prev, &next, &today);
@@ -232,12 +298,46 @@ impl MainWindow {
 
     pub fn present(self: &Rc<Self>) {
         self.window.present();
-        self.view.grab_focus();
+        self.focus_current_mode();
+    }
+
+    fn focus_current_mode(self: &Rc<Self>) {
+        if self.view_stack.visible_child_name().as_deref() == Some("edit") {
+            self.view.grab_focus();
+        } else {
+            self.preview.scroll.grab_focus();
+        }
+    }
+
+    /// Switches between the rendered view and the editor.
+    pub fn set_mode(self: &Rc<Self>, mode: &str) {
+        if self.view_stack.visible_child_name().as_deref() == Some(mode) {
+            return;
+        }
+        if mode == "preview" {
+            // The editor may hold unsaved keystrokes the rendered view would
+            // otherwise not show.
+            self.flush_save();
+            self.render_preview();
+        }
+        self.view_stack.set_visible_child_name(mode);
+        let index = if mode == "edit" { 1 } else { 0 };
+        if self.modes.active() != index {
+            self.modes.set_active(index);
+        }
+        self.focus_current_mode();
+    }
+
+    fn render_preview(self: &Rc<Self>) {
+        let blocks = self.store.borrow().blocks(self.date.get()).unwrap_or_default();
+        self.preview.render(&blocks);
     }
 
     /// Puts the cursor on a 0-based line and scrolls it into view — how a tray
     /// entry and, later, a search hit navigate to their source.
     pub fn scroll_to_line(self: &Rc<Self>, line: usize) {
+        // Landing on a specific line is an editing intent.
+        self.set_mode("edit");
         let Some(mut iter) = self.buffer.iter_at_line(line as i32) else {
             return;
         };
@@ -284,6 +384,14 @@ impl MainWindow {
         self.loading.set(false);
 
         self.refresh_refs();
+        // Selecting a day always shows it rendered; `e` or the toggle opens
+        // the editor.
+        self.render_preview();
+        self.preview.scroll_to_top();
+        self.view_stack.set_visible_child_name("preview");
+        if self.modes.active() != 0 {
+            self.modes.set_active(0);
+        }
         self.title.set_title(&dates::short(date));
         let today = Local::now().date_naive();
         self.title.set_subtitle(&if date == today {
@@ -329,6 +437,9 @@ impl MainWindow {
         self.refresh_sidebar();
         self.push_tray();
         self.refresh_refs();
+        if self.view_stack.visible_child_name().as_deref() == Some("preview") {
+            self.render_preview();
+        }
     }
 
     /// Opens the search bar with the sidebar already switched to results.
@@ -425,6 +536,9 @@ impl MainWindow {
         if let Some(d) = self.refs.borrow().as_ref() {
             d.refresh();
         }
+        if self.view_stack.visible_child_name().as_deref() == Some("preview") {
+            self.render_preview();
+        }
     }
 
     /// Hands newly-seen references to the background resolver.
@@ -432,9 +546,12 @@ impl MainWindow {
         self: &Rc<Self>,
         f: impl Fn(Vec<crate::gitlab::refs::Reference>) + 'static,
     ) {
+        let f = Rc::new(f);
         if let Some(d) = self.refs.borrow().as_ref() {
-            d.connect_resolve(f);
+            let f = f.clone();
+            d.connect_resolve(move |needed| f(needed));
         }
+        self.preview.connect_resolve_refs(move |needed| f(needed));
     }
 
     /// Keeps the tray menu in step with what was just written.

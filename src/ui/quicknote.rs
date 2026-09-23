@@ -15,7 +15,8 @@ use gtk::gdk;
 use crate::i18n::gettext;
 use crate::gitlab::refs::Reference;
 use crate::store::{blocks, Block, Store};
-use crate::ui::markup::{self, RefTarget};
+use crate::ui::markup;
+use crate::ui::refs::{open_link, RefResolver};
 use crate::ui::dates;
 
 pub struct QuickNote {
@@ -202,44 +203,9 @@ impl QuickNote {
     /// references into `<a>` — GtkLabel makes those clickable, and the `title`
     /// attribute becomes the hover card.
     fn render(self: &Rc<Self>, text: &str) -> String {
-        let cfg = crate::config::load();
-        let default_project = cfg.gitlab.main_project.clone();
-        let store = self.store.clone();
-        let unresolved: RefCell<Vec<Reference>> = RefCell::new(Vec::new());
-
-        let markup = markup::to_pango(text, &|r: &Reference| {
-            if !cfg.gitlab.is_configured() {
-                return None;
-            }
-            let key = r.cache_key(&default_project);
-            let entry = store.borrow().ref_cache_get(&key).ok().flatten();
-            let now = chrono::Utc::now().timestamp();
-            match entry {
-                Some(e) => {
-                    if !e.is_fresh(now) {
-                        unresolved.borrow_mut().push(r.clone());
-                    }
-                    e.resolved.map(|res| {
-                        let state = crate::ui::refs::translate_state(&res.state);
-                        let mut tip = res.title.clone();
-                        if !state.is_empty() {
-                            tip.push_str(" · ");
-                            tip.push_str(&state);
-                        }
-                        RefTarget {
-                            url: Some(res.web_url),
-                            tooltip: Some(tip),
-                        }
-                    })
-                }
-                None => {
-                    unresolved.borrow_mut().push(r.clone());
-                    None
-                }
-            }
-        });
-
-        let pending = unresolved.into_inner();
+        let resolver = RefResolver::new(self.store.clone());
+        let markup = markup::to_pango(text, &|r| resolver.lookup(r));
+        let pending = resolver.take_pending();
         if !pending.is_empty() {
             if let Some(cb) = self.on_resolve.borrow().as_ref() {
                 cb(pending);
@@ -357,16 +323,7 @@ impl QuickNote {
         label.set_wrap_mode(gtk::pango::WrapMode::WordChar);
         label.set_hexpand(true);
         // Let a click on a link open it instead of starting an edit.
-        label.connect_activate_link(|label, uri| {
-            let launcher = gtk::UriLauncher::new(uri);
-            let window = label.root().and_downcast::<gtk::Window>();
-            launcher.launch(window.as_ref(), gtk::gio::Cancellable::NONE, |res| {
-                if let Err(e) = res {
-                    tracing::warn!(?e, "could not open the link");
-                }
-            });
-            glib::Propagation::Stop
-        });
+        label.connect_activate_link(|label, uri| open_link(label, uri));
 
         let delete = gtk::Button::from_icon_name("user-trash-symbolic");
         delete.add_css_class("flat");

@@ -273,3 +273,81 @@ pub fn translate_state(state: &str) -> String {
         other => other.to_string(),
     }
 }
+
+/// Looks GitLab references up in the cache while rendering, collecting the
+/// ones that need fetching.
+///
+/// Shared by everything that paints references — the Quick Note rows and the
+/// rendered day view — so there is one definition of "resolved" and one place
+/// that decides what to re-fetch.
+pub struct RefResolver {
+    store: Rc<RefCell<Store>>,
+    default_project: String,
+    configured: bool,
+    pending: RefCell<Vec<crate::gitlab::refs::Reference>>,
+}
+
+impl RefResolver {
+    pub fn new(store: Rc<RefCell<Store>>) -> Self {
+        let cfg = crate::config::load();
+        Self {
+            store,
+            default_project: cfg.gitlab.main_project.clone(),
+            configured: cfg.gitlab.is_configured(),
+            pending: RefCell::new(Vec::new()),
+        }
+    }
+
+    pub fn lookup(
+        &self,
+        r: &crate::gitlab::refs::Reference,
+    ) -> Option<crate::ui::markup::RefTarget> {
+        if !self.configured {
+            return None;
+        }
+        let key = r.cache_key(&self.default_project);
+        let entry = self.store.borrow().ref_cache_get(&key).ok().flatten();
+        let now = chrono::Utc::now().timestamp();
+        match entry {
+            Some(e) => {
+                if !e.is_fresh(now) {
+                    self.pending.borrow_mut().push(r.clone());
+                }
+                e.resolved.map(|res| {
+                    let state = translate_state(&res.state);
+                    let mut tip = res.title.clone();
+                    if !state.is_empty() {
+                        tip.push_str(" · ");
+                        tip.push_str(&state);
+                    }
+                    crate::ui::markup::RefTarget {
+                        url: Some(res.web_url),
+                        tooltip: Some(tip),
+                    }
+                })
+            }
+            None => {
+                self.pending.borrow_mut().push(r.clone());
+                None
+            }
+        }
+    }
+
+    /// References that were missing or stale, for the background resolver.
+    pub fn take_pending(self) -> Vec<crate::gitlab::refs::Reference> {
+        self.pending.into_inner()
+    }
+}
+
+/// Opens a link from a rendered label, rather than letting the default
+/// handler do it, so failures are logged instead of silent.
+pub fn open_link(widget: &impl IsA<gtk::Widget>, uri: &str) -> glib::Propagation {
+    let launcher = gtk::UriLauncher::new(uri);
+    let window = widget.as_ref().root().and_downcast::<gtk::Window>();
+    launcher.launch(window.as_ref(), gtk::gio::Cancellable::NONE, |res| {
+        if let Err(e) = res {
+            tracing::warn!(?e, "could not open the link");
+        }
+    });
+    glib::Propagation::Stop
+}
