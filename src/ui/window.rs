@@ -1,0 +1,483 @@
+//! The main window: day navigation, a sidebar of recent days, and the editor.
+
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
+
+use chrono::{Duration, Local, NaiveDate};
+use gtk::prelude::*;
+use gtk::glib;
+
+use crate::i18n::gettext;
+use crate::app::TrayLink;
+use crate::store::Store;
+use crate::ui::{dates, editor};
+
+/// How long the editor sits idle before the day is written back.
+const SAVE_DEBOUNCE_MS: u32 = 600;
+
+pub struct MainWindow {
+    pub window: adw::ApplicationWindow,
+    store: Rc<RefCell<Store>>,
+    buffer: sourceview5::Buffer,
+    date: Rc<Cell<NaiveDate>>,
+    /// Set while the buffer is being repopulated, so the resulting `changed`
+    /// signal is not mistaken for the user typing.
+    loading: Rc<Cell<bool>>,
+    pending_save: Rc<RefCell<Option<glib::SourceId>>>,
+    title: adw::WindowTitle,
+    sidebar: gtk::ListBox,
+    view: sourceview5::View,
+    tray: Option<TrayLink>,
+    search_bar: gtk::SearchBar,
+    search_entry: gtk::SearchEntry,
+    sidebar_stack: gtk::Stack,
+    results: gtk::ListBox,
+    results_status: gtk::Label,
+    /// Debounces the query so each keystroke does not hit SQLite.
+    pending_search: Rc<RefCell<Option<glib::SourceId>>>,
+    refs: RefCell<Option<Rc<crate::ui::refs::RefDecorator>>>,
+}
+
+impl MainWindow {
+    pub fn new(
+        app: &adw::Application,
+        store: Rc<RefCell<Store>>,
+        tray: Option<TrayLink>,
+    ) -> Rc<Self> {
+        let (view, buffer) = editor::build();
+
+        let title = adw::WindowTitle::new(&gettext("Daily Notes"), "");
+        let header = adw::HeaderBar::builder().title_widget(&title).build();
+
+        let prev = gtk::Button::from_icon_name("go-previous-symbolic");
+        prev.set_tooltip_text(Some(&gettext("Previous day")));
+        let next = gtk::Button::from_icon_name("go-next-symbolic");
+        next.set_tooltip_text(Some(&gettext("Next day")));
+        let today = gtk::Button::with_label(&gettext("Today"));
+        let nav = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+        nav.add_css_class("linked");
+        nav.append(&prev);
+        nav.append(&next);
+        header.pack_start(&nav);
+        header.pack_start(&today);
+
+        let sidebar = gtk::ListBox::new();
+        sidebar.set_selection_mode(gtk::SelectionMode::Single);
+        sidebar.add_css_class("navigation-sidebar");
+        let sidebar_scroll = gtk::ScrolledWindow::builder()
+            .hscrollbar_policy(gtk::PolicyType::Never)
+            .child(&sidebar)
+            .build();
+
+        // The sidebar shows recent days, or search results while searching —
+        // one column, two jobs, so the editor never loses width.
+        let results = gtk::ListBox::new();
+        results.set_selection_mode(gtk::SelectionMode::None);
+        results.add_css_class("navigation-sidebar");
+        let results_status = gtk::Label::new(None);
+        results_status.add_css_class("dim-label");
+        results_status.set_margin_top(18);
+        results_status.set_wrap(true);
+        results_status.set_justify(gtk::Justification::Center);
+        let results_box = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        results_box.append(&results_status);
+        results_box.append(&results);
+        let results_scroll = gtk::ScrolledWindow::builder()
+            .hscrollbar_policy(gtk::PolicyType::Never)
+            .child(&results_box)
+            .build();
+
+        let sidebar_stack = gtk::Stack::new();
+        sidebar_stack.add_named(&sidebar_scroll, Some("days"));
+        sidebar_stack.add_named(&results_scroll, Some("results"));
+        sidebar_stack.set_visible_child_name("days");
+
+        let sidebar_title = adw::WindowTitle::new(&gettext("Recent days"), "");
+        let sidebar_page = adw::ToolbarView::new();
+        sidebar_page.add_top_bar(
+            &adw::HeaderBar::builder()
+                .title_widget(&sidebar_title)
+                .show_end_title_buttons(false)
+                .build(),
+        );
+        sidebar_page.set_content(Some(&sidebar_stack));
+
+        let search_entry = gtk::SearchEntry::new();
+        search_entry.set_placeholder_text(Some(&gettext("Search all notes…")));
+        search_entry.set_hexpand(true);
+        // key_capture_widget is set once the window exists, so typing
+        // anywhere in the window opens the search bar.
+        let search_bar = gtk::SearchBar::builder().child(&search_entry).build();
+
+        let editor_scroll = gtk::ScrolledWindow::builder()
+            .hscrollbar_policy(gtk::PolicyType::Never)
+            .vexpand(true)
+            .child(&view)
+            .build();
+        let search_toggle = gtk::ToggleButton::new();
+        search_toggle.set_icon_name("system-search-symbolic");
+        search_toggle.set_tooltip_text(Some(&gettext("Search all notes")));
+        header.pack_end(&search_toggle);
+        search_toggle
+            .bind_property("active", &search_bar, "search-mode-enabled")
+            .bidirectional()
+            .sync_create()
+            .build();
+
+        let content = adw::ToolbarView::new();
+        content.add_top_bar(&header);
+        content.add_top_bar(&search_bar);
+        content.set_content(Some(&editor_scroll));
+
+        let split = adw::OverlaySplitView::builder()
+            .sidebar(&sidebar_page)
+            .content(&content)
+            .max_sidebar_width(240.0)
+            .build();
+
+        let window = adw::ApplicationWindow::builder()
+            .application(app)
+            .default_width(900)
+            .default_height(640)
+            .title(gettext("Daily Notes"))
+            .content(&split)
+            .build();
+
+        let this = Rc::new(Self {
+            window,
+            store,
+            buffer,
+            date: Rc::new(Cell::new(Local::now().date_naive())),
+            loading: Rc::new(Cell::new(false)),
+            pending_save: Rc::new(RefCell::new(None)),
+            title,
+            sidebar,
+            view: view.clone(),
+            tray,
+            search_bar: search_bar.clone(),
+            search_entry: search_entry.clone(),
+            sidebar_stack,
+            results,
+            results_status,
+            pending_search: Rc::new(RefCell::new(None)),
+            refs: RefCell::new(None),
+        });
+
+        let decorator = crate::ui::refs::RefDecorator::new(&view, &this.buffer, this.store.clone());
+        *this.refs.borrow_mut() = Some(decorator);
+
+        search_bar.set_key_capture_widget(Some(&this.window));
+        this.connect_signals(&prev, &next, &today);
+        this.load(this.date.get());
+        this.refresh_sidebar();
+        view.grab_focus();
+        this
+    }
+
+    fn connect_signals(self: &Rc<Self>, prev: &gtk::Button, next: &gtk::Button, today: &gtk::Button) {
+        let s = self.clone();
+        prev.connect_clicked(move |_| s.go_to(s.date.get() - Duration::days(1)));
+        let s = self.clone();
+        next.connect_clicked(move |_| s.go_to(s.date.get() + Duration::days(1)));
+        let s = self.clone();
+        today.connect_clicked(move |_| s.go_to(Local::now().date_naive()));
+
+        let s = self.clone();
+        self.buffer.connect_changed(move |_| s.schedule_save());
+
+        let s = self.clone();
+        self.sidebar.connect_row_activated(move |_, row| {
+            let key: Option<String> = unsafe { row.data::<String>("date").map(|p| p.as_ref().clone()) };
+            if let Some(key) = key {
+                if let Ok(d) = NaiveDate::parse_from_str(&key, crate::store::days::DATE_FMT) {
+                    s.go_to(d);
+                }
+            }
+        });
+
+        let s = self.clone();
+        self.results.connect_row_activated(move |_, row| {
+            let hit: Option<(NaiveDate, usize)> =
+                unsafe { row.data::<(NaiveDate, usize)>("hit").map(|p| *p.as_ref()) };
+            if let Some((date, line)) = hit {
+                s.go_to(date);
+                s.scroll_to_line(line);
+            }
+        });
+
+        let s = self.clone();
+        self.search_entry.connect_search_changed(move |_| s.schedule_search());
+        let s = self.clone();
+        self.search_bar.connect_notify_local(Some("search-mode-enabled"), move |bar, _| {
+            if bar.is_search_mode() {
+                s.search_entry.grab_focus();
+                s.run_search();
+            } else {
+                s.search_entry.set_text("");
+                s.sidebar_stack.set_visible_child_name("days");
+                s.view.grab_focus();
+            }
+        });
+
+        // Closing hides rather than destroys: the app lives on in the tray,
+        // and "Open in window" has to be able to bring this very window back.
+        // Letting it be destroyed would leave a dangling handle behind.
+        let s = self.clone();
+        self.window.connect_close_request(move |w| {
+            s.flush_save();
+            w.set_visible(false);
+            glib::Propagation::Stop
+        });
+    }
+
+    pub fn present(self: &Rc<Self>) {
+        self.window.present();
+        self.view.grab_focus();
+    }
+
+    /// Puts the cursor on a 0-based line and scrolls it into view — how a tray
+    /// entry and, later, a search hit navigate to their source.
+    pub fn scroll_to_line(self: &Rc<Self>, line: usize) {
+        let Some(mut iter) = self.buffer.iter_at_line(line as i32) else {
+            return;
+        };
+        self.buffer.place_cursor(&iter);
+        // within_margin 0.15 leaves the line a little off the top edge
+        self.view.scroll_to_iter(&mut iter, 0.15, false, 0.0, 0.0);
+        self.view.grab_focus();
+    }
+
+    pub fn go_to(self: &Rc<Self>, date: NaiveDate) {
+        if date == self.date.get() {
+            return;
+        }
+        self.flush_save();
+        self.date.set(date);
+        self.load(date);
+        self.refresh_sidebar();
+    }
+
+    /// Picks up a change another view made to the day on screen.
+    ///
+    /// Quick Note writes straight to the store, so an open main window showing
+    /// the same day would otherwise hold a stale buffer and overwrite it on
+    /// its next save.
+    pub fn reload_if_showing(self: &Rc<Self>, date: NaiveDate) {
+        if self.date.get() == date {
+            self.flush_save();
+            self.load(date);
+            self.refresh_sidebar();
+        }
+    }
+
+    fn load(self: &Rc<Self>, date: NaiveDate) {
+        let body = match self.store.borrow().body(date) {
+            Ok(b) => b,
+            Err(e) => {
+                tracing::error!(?e, %date, "could not read day");
+                String::new()
+            }
+        };
+        self.loading.set(true);
+        self.buffer.set_text(&body);
+        self.buffer.place_cursor(&self.buffer.end_iter());
+        self.loading.set(false);
+
+        self.refresh_refs();
+        self.title.set_title(&dates::short(date));
+        let today = Local::now().date_naive();
+        self.title.set_subtitle(&if date == today {
+            gettext("Today")
+        } else {
+            dates::long(date)
+        });
+    }
+
+    fn schedule_save(self: &Rc<Self>) {
+        if self.loading.get() {
+            return;
+        }
+        if let Some(id) = self.pending_save.borrow_mut().take() {
+            id.remove();
+        }
+        let s = self.clone();
+        let id = glib::timeout_add_local_once(
+            std::time::Duration::from_millis(SAVE_DEBOUNCE_MS as u64),
+            move || {
+                s.pending_save.replace(None);
+                s.save_now();
+            },
+        );
+        self.pending_save.replace(Some(id));
+    }
+
+    pub fn flush_save(self: &Rc<Self>) {
+        if let Some(id) = self.pending_save.borrow_mut().take() {
+            id.remove();
+            self.save_now();
+        }
+    }
+
+    fn save_now(self: &Rc<Self>) {
+        let body = editor::text(&self.buffer);
+        let date = self.date.get();
+        if let Err(e) = self.store.borrow_mut().save(date, &body) {
+            tracing::error!(?e, %date, "could not save day");
+            return;
+        }
+        tracing::debug!(%date, bytes = body.len(), "saved");
+        self.refresh_sidebar();
+        self.push_tray();
+        self.refresh_refs();
+    }
+
+    /// Opens the search bar with the sidebar already switched to results.
+    pub fn start_search(self: &Rc<Self>) {
+        self.search_bar.set_search_mode(true);
+        self.search_entry.grab_focus();
+    }
+
+    fn schedule_search(self: &Rc<Self>) {
+        if let Some(id) = self.pending_search.borrow_mut().take() {
+            id.remove();
+        }
+        let s = self.clone();
+        let id = glib::timeout_add_local_once(std::time::Duration::from_millis(150), move || {
+            s.pending_search.replace(None);
+            s.run_search();
+        });
+        self.pending_search.replace(Some(id));
+    }
+
+    fn run_search(self: &Rc<Self>) {
+        let query = self.search_entry.text().to_string();
+        self.sidebar_stack.set_visible_child_name("results");
+
+        while let Some(child) = self.results.first_child() {
+            self.results.remove(&child);
+        }
+
+        if query.trim().is_empty() {
+            self.results_status.set_visible(true);
+            self.results_status.set_text(&gettext("Type to search your notes."));
+            return;
+        }
+
+        // Search what is on screen too: the current day may not be saved yet.
+        self.flush_save();
+
+        let hits = match self.store.borrow().search(&query, 100) {
+            Ok(h) => h,
+            Err(e) => {
+                tracing::error!(?e, "search failed");
+                self.results_status.set_visible(true);
+                self.results_status.set_text(&gettext("Search failed."));
+                return;
+            }
+        };
+
+        if hits.is_empty() {
+            self.results_status.set_visible(true);
+            // Translators: {} is the text the user searched for.
+            self.results_status
+                .set_text(&gettext("No notes match “{}”.").replace("{}", query.trim()));
+            return;
+        }
+
+        self.results_status.set_visible(true);
+        self.results_status.set_text(
+            // Translators: {} is the number of search results.
+            &crate::i18n::ngettext("{} result", "{} results", hits.len() as u32)
+                .replace("{}", &hits.len().to_string()),
+        );
+
+        for hit in hits {
+            let date = gtk::Label::new(Some(&dates::short(hit.date)));
+            date.set_xalign(0.0);
+            date.add_css_class("dim-label");
+            date.add_css_class("caption");
+
+            let text = gtk::Label::new(Some(&hit.text));
+            text.set_xalign(0.0);
+            text.set_wrap(true);
+            text.set_wrap_mode(gtk::pango::WrapMode::WordChar);
+            text.set_lines(3);
+            text.set_ellipsize(gtk::pango::EllipsizeMode::End);
+
+            let vbox = gtk::Box::new(gtk::Orientation::Vertical, 2);
+            vbox.set_margin_top(8);
+            vbox.set_margin_bottom(8);
+            vbox.set_margin_start(12);
+            vbox.set_margin_end(12);
+            vbox.append(&date);
+            vbox.append(&text);
+
+            let row = gtk::ListBoxRow::builder().child(&vbox).activatable(true).build();
+            unsafe {
+                row.set_data("hit", (hit.date, hit.line));
+            }
+            self.results.append(&row);
+        }
+    }
+
+    /// Re-reads references and repaints them. Cheap: it works from the cache.
+    pub fn refresh_refs(self: &Rc<Self>) {
+        if let Some(d) = self.refs.borrow().as_ref() {
+            d.refresh();
+        }
+    }
+
+    /// Hands newly-seen references to the background resolver.
+    pub fn connect_resolve_refs(
+        self: &Rc<Self>,
+        f: impl Fn(Vec<crate::gitlab::refs::Reference>) + 'static,
+    ) {
+        if let Some(d) = self.refs.borrow().as_ref() {
+            d.connect_resolve(f);
+        }
+    }
+
+    /// Keeps the tray menu in step with what was just written.
+    fn push_tray(self: &Rc<Self>) {
+        if let Some(tray) = &self.tray {
+            tray.push(crate::app::snapshot(&self.store.borrow()));
+        }
+    }
+
+    fn refresh_sidebar(self: &Rc<Self>) {
+        while let Some(child) = self.sidebar.first_child() {
+            self.sidebar.remove(&child);
+        }
+        let today = Local::now().date_naive();
+        let current = self.date.get();
+
+        let mut days = match self.store.borrow().recent(60) {
+            Ok(d) => d,
+            Err(e) => {
+                tracing::error!(?e, "could not list recent days");
+                Vec::new()
+            }
+        };
+        // The day being edited belongs in the list even before it has content.
+        if !days.contains(&current) {
+            days.push(current);
+            days.sort_unstable_by(|a, b| b.cmp(a));
+        }
+
+        for d in days {
+            let label = gtk::Label::new(Some(&dates::short(d)));
+            label.set_xalign(0.0);
+            let row = gtk::ListBoxRow::builder().child(&label).build();
+            if d == today {
+                label.set_markup(&format!("<b>{}</b>", glib::markup_escape_text(&dates::short(d))));
+            }
+            unsafe {
+                row.set_data("date", d.format(crate::store::days::DATE_FMT).to_string());
+            }
+            self.sidebar.append(&row);
+            if d == current {
+                self.sidebar.select_row(Some(&row));
+            }
+        }
+    }
+}

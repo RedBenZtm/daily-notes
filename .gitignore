@@ -1,0 +1,8 @@
+/target
+
+# Byte-compiled helpers under tools/
+__pycache__/
+*.pyc
+
+# Compiled message catalogues; regenerate with tools/i18n.sh
+*.mo

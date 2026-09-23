@@ -1,0 +1,26 @@
+[package]
+name = "daily-notes"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+adw = { version = "0.9", package = "libadwaita", features = ["v1_9", "gtk_v4_22"] }
+anyhow = "1.0.104"
+async-channel = "2"
+chrono = "0.4"
+gettext-rs = { version = "0.8.0", features = ["gettext-system"] }
+# gnome_50 matches this machine exactly (GTK 4.22 / GNOME 50) and pins the
+# companion gtk-rs crates to one coherent set.
+gtk = { version = "0.11", package = "gtk4", features = ["gnome_50"] }
+keyring = "4.2.0"
+ksni = { version = "0.3", default-features = false, features = ["tokio"] }
+regex = "1.13.1"
+reqwest = { version = "0.13.5", default-features = false, features = ["json", "rustls", "http2", "charset"] }
+rusqlite = { version = "0.40", features = ["bundled", "functions"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+sourceview5 = { version = "0.11", features = ["v5_16", "gtk_v4_18"] }
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros", "signal"] }
+toml = "1.1.6"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }

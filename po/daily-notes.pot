@@ -1,0 +1,223 @@
+
+#. Translators: tray submenu, {} is a date like "Wed 23 Sep".
+#: src/app.rs:78
+msgid "Today · {}"
+msgstr ""
+
+#. Translators: tray submenu, {} is a date like "Tue 22 Sep".
+#: src/app.rs:83
+msgid "Last workday · {}"
+msgstr ""
+
+#: src/app.rs:84 src/ui/quicknote.rs:428
+msgid "No earlier notes"
+msgstr ""
+
+#: src/tray/mod.rs:115
+msgid "(no entries)"
+msgstr ""
+
+#: src/tray/mod.rs:126
+msgid "Open in window"
+msgstr ""
+
+#: src/tray/mod.rs:156 src/tray/mod.rs:175 src/ui/quicknote.rs:35 src/ui/window.rs:49 src/ui/window.rs:142
+msgid "Daily Notes"
+msgstr ""
+
+#. Translators: {} is the number of note entries written today.
+#: src/tray/mod.rs:177
+msgid "{} entry today"
+msgid_plural "{} entries today"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/tray/mod.rs:198 src/ui/quicknote.rs:100
+msgid "Quick Note"
+msgstr ""
+
+#: src/tray/mod.rs:208 src/ui/quicknote.rs:49
+msgid "Search…"
+msgstr ""
+
+#: src/tray/mod.rs:214 src/ui/settings.rs:111
+msgid "Settings"
+msgstr ""
+
+#: src/tray/mod.rs:221
+msgid "Quit"
+msgstr ""
+
+#: src/ui/quicknote.rs:43
+msgid "Add an entry…"
+msgstr ""
+
+#: src/ui/quicknote.rs:48
+msgid "Last workday"
+msgstr ""
+
+#: src/ui/quicknote.rs:50
+msgid "Open"
+msgstr ""
+
+#: src/ui/quicknote.rs:248 src/ui/window.rs:56 src/ui/window.rs:290
+msgid "Today"
+msgstr ""
+
+#: src/ui/quicknote.rs:260
+msgid "Nothing yet today"
+msgstr ""
+
+#: src/ui/quicknote.rs:261
+msgid "Type below to add your first entry."
+msgstr ""
+
+#: src/ui/quicknote.rs:284
+msgid "Drag to reorder"
+msgstr ""
+
+#: src/ui/quicknote.rs:294
+msgid "Delete entry"
+msgstr ""
+
+#: src/ui/refs.rs:241
+msgid "Not found on GitLab"
+msgstr ""
+
+#: src/ui/refs.rs:267
+msgid "open"
+msgstr ""
+
+#: src/ui/refs.rs:268
+msgid "closed"
+msgstr ""
+
+#: src/ui/refs.rs:269
+msgid "merged"
+msgstr ""
+
+#: src/ui/refs.rs:270
+msgid "locked"
+msgstr ""
+
+#: src/ui/refs.rs:271
+msgid "active"
+msgstr ""
+
+#: src/ui/settings.rs:30
+msgid "Instance URL"
+msgstr ""
+
+#: src/ui/settings.rs:35
+msgid "Personal access token"
+msgstr ""
+
+#: src/ui/settings.rs:44
+msgid "Main project"
+msgstr ""
+
+#: src/ui/settings.rs:48
+msgid "Main group"
+msgstr ""
+
+#: src/ui/settings.rs:53
+msgid "How references resolve"
+msgstr ""
+
+#: src/ui/settings.rs:62
+msgid "#123 and !45 resolve in the main project; &7 in the main group. Write group/project#123 to reach another project."
+msgstr ""
+
+#: src/ui/settings.rs:68
+msgid "The token is stored in the GNOME keyring"
+msgstr ""
+
+#: src/ui/settings.rs:72
+msgid "It needs the read_api scope. Leave blank to keep the current one."
+msgstr ""
+
+#: src/ui/settings.rs:76
+msgid "Test connection"
+msgstr ""
+
+#: src/ui/settings.rs:78
+msgid "Not tested"
+msgstr ""
+
+#: src/ui/settings.rs:85 src/ui/settings.rs:105
+msgid "GitLab"
+msgstr ""
+
+#. The formats live here rather than as placeholders in the fields:
+#. AdwEntryRow's title stays inside the field instead of floating out
+#. of the way, so an in-field placeholder renders on top of it.
+#. Translators: the example values are formats, not real addresses —
+#. keep the URL as-is, but do translate "group/project" and "group".
+#: src/ui/settings.rs:93
+msgid "Instance URL: https://gitlab.example.com\n"
+"Main project: group/project · Main group: group"
+msgstr ""
+
+#: src/ui/settings.rs:141
+msgid "Could not store the token"
+msgstr ""
+
+#: src/ui/settings.rs:156
+msgid "No token stored yet"
+msgstr ""
+
+#: src/ui/settings.rs:160
+msgid "Enter the instance URL first"
+msgstr ""
+
+#: src/ui/settings.rs:164
+msgid "Testing…"
+msgstr ""
+
+#. Translators: {} is the GitLab version, e.g. "17.4.1".
+#: src/ui/settings.rs:184
+msgid "Connected to GitLab {}"
+msgstr ""
+
+#: src/ui/settings.rs:188 src/ui/settings.rs:190
+msgid "Connection failed"
+msgstr ""
+
+#: src/ui/window.rs:53
+msgid "Previous day"
+msgstr ""
+
+#: src/ui/window.rs:55
+msgid "Next day"
+msgstr ""
+
+#: src/ui/window.rs:95
+msgid "Recent days"
+msgstr ""
+
+#: src/ui/window.rs:106
+msgid "Search all notes…"
+msgstr ""
+
+#: src/ui/window.rs:119
+msgid "Search all notes"
+msgstr ""
+
+#: src/ui/window.rs:362
+msgid "Type to search your notes."
+msgstr ""
+
+#: src/ui/window.rs:374
+msgid "Search failed."
+msgstr ""
+
+#: src/ui/window.rs:383
+msgid "No notes match “{}”."
+msgstr ""
+
+#. Translators: {} is the number of search results.
+#: src/ui/window.rs:390
+msgid "{} result"
+msgid_plural "{} results"
+msgstr[0] ""
+msgstr[1] ""

@@ -1,0 +1,254 @@
+# Spanish translations for daily-notes package.
+# This file is put in the public domain.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: daily-notes\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-23 11:03+0200\n"
+"PO-Revision-Date: 2026-09-23 11:03+0200\n"
+"Last-Translator: \n"
+"Language-Team: none\n"
+"Language: es\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#. Translators: tray submenu, {} is a date like "Wed 23 Sep".
+#: src/app.rs:78
+msgid "Today · {}"
+msgstr "Hoy · {}"
+
+#. Translators: tray submenu, {} is a date like "Tue 22 Sep".
+#: src/app.rs:83
+msgid "Last workday · {}"
+msgstr "Último día laborable · {}"
+
+#: src/app.rs:84 src/ui/quicknote.rs:428
+msgid "No earlier notes"
+msgstr "No hay notas anteriores"
+
+#: src/tray/mod.rs:115
+msgid "(no entries)"
+msgstr "(sin entradas)"
+
+#: src/tray/mod.rs:126
+msgid "Open in window"
+msgstr "Abrir en una ventana"
+
+#: src/tray/mod.rs:156 src/tray/mod.rs:175 src/ui/quicknote.rs:35
+#: src/ui/window.rs:49 src/ui/window.rs:142
+msgid "Daily Notes"
+msgstr "Notas diarias"
+
+#. Translators: {} is the number of note entries written today.
+#: src/tray/mod.rs:177
+msgid "{} entry today"
+msgid_plural "{} entries today"
+msgstr[0] "{} entrada hoy"
+msgstr[1] "{} entradas hoy"
+
+#: src/tray/mod.rs:198 src/ui/quicknote.rs:100
+msgid "Quick Note"
+msgstr "Nota rápida"
+
+#: src/tray/mod.rs:208 src/ui/quicknote.rs:49
+msgid "Search…"
+msgstr "Buscar…"
+
+#: src/tray/mod.rs:214 src/ui/settings.rs:111
+msgid "Settings"
+msgstr "Preferencias"
+
+#: src/tray/mod.rs:221
+msgid "Quit"
+msgstr "Salir"
+
+#: src/ui/quicknote.rs:43
+msgid "Add an entry…"
+msgstr "Añadir una entrada…"
+
+#: src/ui/quicknote.rs:48
+msgid "Last workday"
+msgstr "Último día laborable"
+
+#: src/ui/quicknote.rs:50
+msgid "Open"
+msgstr "Abrir"
+
+#: src/ui/quicknote.rs:248 src/ui/window.rs:56 src/ui/window.rs:290
+msgid "Today"
+msgstr "Hoy"
+
+#: src/ui/quicknote.rs:260
+msgid "Nothing yet today"
+msgstr "Nada todavía hoy"
+
+#: src/ui/quicknote.rs:261
+msgid "Type below to add your first entry."
+msgstr "Escribe abajo para añadir tu primera entrada."
+
+#: src/ui/quicknote.rs:284
+msgid "Drag to reorder"
+msgstr "Arrastra para reordenar"
+
+#: src/ui/quicknote.rs:294
+msgid "Delete entry"
+msgstr "Eliminar entrada"
+
+#: src/ui/refs.rs:241
+msgid "Not found on GitLab"
+msgstr "No se encontró en GitLab"
+
+#: src/ui/refs.rs:267
+msgid "open"
+msgstr "abierta"
+
+#: src/ui/refs.rs:268
+msgid "closed"
+msgstr "cerrada"
+
+#: src/ui/refs.rs:269
+msgid "merged"
+msgstr "fusionada"
+
+#: src/ui/refs.rs:270
+msgid "locked"
+msgstr "bloqueada"
+
+#: src/ui/refs.rs:271
+msgid "active"
+msgstr "activo"
+
+#: src/ui/settings.rs:30
+msgid "Instance URL"
+msgstr "URL de la instancia"
+
+#: src/ui/settings.rs:35
+msgid "Personal access token"
+msgstr "Token de acceso personal"
+
+#: src/ui/settings.rs:44
+msgid "Main project"
+msgstr "Proyecto principal"
+
+#: src/ui/settings.rs:48
+msgid "Main group"
+msgstr "Grupo principal"
+
+#: src/ui/settings.rs:53
+msgid "How references resolve"
+msgstr "Cómo se resuelven las referencias"
+
+#: src/ui/settings.rs:62
+msgid ""
+"#123 and !45 resolve in the main project; &7 in the main group. Write group/"
+"project#123 to reach another project."
+msgstr ""
+"#123 y !45 se resuelven en el proyecto principal; &7 en el grupo principal. "
+"Escribe grupo/proyecto#123 para otro proyecto."
+
+#: src/ui/settings.rs:68
+msgid "The token is stored in the GNOME keyring"
+msgstr "El token se guarda en el depósito de claves de GNOME"
+
+#: src/ui/settings.rs:72
+msgid "It needs the read_api scope. Leave blank to keep the current one."
+msgstr "Necesita el ámbito read_api. Déjalo vacío para conservar el actual."
+
+#: src/ui/settings.rs:76
+msgid "Test connection"
+msgstr "Probar la conexión"
+
+#: src/ui/settings.rs:78
+msgid "Not tested"
+msgstr "Sin probar"
+
+#: src/ui/settings.rs:85 src/ui/settings.rs:105
+msgid "GitLab"
+msgstr "GitLab"
+
+#. The formats live here rather than as placeholders in the fields:
+#. AdwEntryRow's title stays inside the field instead of floating out
+#. of the way, so an in-field placeholder renders on top of it.
+#. Translators: the example values are formats, not real addresses —
+#. keep the URL as-is, but do translate "group/project" and "group".
+#: src/ui/settings.rs:93
+msgid ""
+"Instance URL: https://gitlab.example.com\n"
+"Main project: group/project · Main group: group"
+msgstr "URL de la instancia: https://gitlab.example.com\nProyecto principal: grupo/proyecto · Grupo principal: grupo"
+
+#: src/ui/settings.rs:141
+msgid "Could not store the token"
+msgstr "No se pudo guardar el token"
+
+#: src/ui/settings.rs:156
+msgid "No token stored yet"
+msgstr "Todavía no hay ningún token guardado"
+
+#: src/ui/settings.rs:160
+msgid "Enter the instance URL first"
+msgstr "Introduce primero la URL de la instancia"
+
+#: src/ui/settings.rs:164
+msgid "Testing…"
+msgstr "Probando…"
+
+#. Translators: {} is the GitLab version, e.g. "17.4.1".
+#: src/ui/settings.rs:184
+msgid "Connected to GitLab {}"
+msgstr "Conectado a GitLab {}"
+
+#: src/ui/settings.rs:188 src/ui/settings.rs:190
+msgid "Connection failed"
+msgstr "Error de conexión"
+
+#: src/ui/window.rs:53
+msgid "Previous day"
+msgstr "Día anterior"
+
+#: src/ui/window.rs:55
+msgid "Next day"
+msgstr "Día siguiente"
+
+#: src/ui/window.rs:95
+msgid "Recent days"
+msgstr "Días recientes"
+
+#: src/ui/window.rs:106
+msgid "Search all notes…"
+msgstr "Buscar en todas las notas…"
+
+#: src/ui/window.rs:119
+msgid "Search all notes"
+msgstr "Buscar en todas las notas"
+
+#: src/ui/window.rs:362
+msgid "Type to search your notes."
+msgstr "Escribe para buscar en tus notas."
+
+#: src/ui/window.rs:374
+msgid "Search failed."
+msgstr "Error en la búsqueda."
+
+#: src/ui/window.rs:383
+msgid "No notes match “{}”."
+msgstr "Ninguna nota coincide con «{}»."
+
+#. Translators: {} is the number of search results.
+#: src/ui/window.rs:390
+msgid "{} result"
+msgid_plural "{} results"
+msgstr[0] "{} resultado"
+msgstr[1] "{} resultados"
+
+#~ msgctxt "placeholder"
+#~ msgid "group/project"
+#~ msgstr "grupo/proyecto"
+
+#~ msgctxt "placeholder"
+#~ msgid "group"
+#~ msgstr "grupo"
