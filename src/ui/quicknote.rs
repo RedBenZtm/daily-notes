@@ -36,6 +36,7 @@ pub struct QuickNote {
     /// entry written here eventually shows its ticket titles too.
     on_resolve: RefCell<Option<Box<dyn Fn(Vec<Reference>)>>>,
     on_sync_issues: RefCell<Option<Box<dyn Fn()>>>,
+    scroll: gtk::ScrolledWindow,
 }
 
 impl QuickNote {
@@ -122,6 +123,7 @@ impl QuickNote {
             on_search: RefCell::new(None),
             on_resolve: RefCell::new(None),
             on_sync_issues: RefCell::new(None),
+            scroll: scroll.clone(),
         });
 
         {
@@ -236,7 +238,36 @@ impl QuickNote {
         self.date.set(date);
         self.reload();
         self.window.present();
-        self.add.grab_focus();
+
+        // Deferred: the rows were just rebuilt, so nothing has been laid out
+        // yet and the field has no position to scroll to. On the next idle the
+        // geometry is real.
+        let s = self.clone();
+        glib::idle_add_local_once(move || {
+            s.add.grab_focus();
+            s.reveal_add_field();
+        });
+    }
+
+    /// Brings the new-entry field into view, however many entries are above it.
+    fn reveal_add_field(self: &Rc<Self>) {
+        let Some(point) = self
+            .add
+            .compute_point(&self.scroll, &gtk::graphene::Point::new(0.0, 0.0))
+        else {
+            return;
+        };
+        let y = f64::from(point.y());
+        let adj = self.scroll.vadjustment();
+        let height = f64::from(self.add.height());
+        let page = adj.page_size();
+        // y is relative to the viewport, so it is negative above the visible
+        // area and past `page` below it.
+        if y < 0.0 {
+            adj.set_value(adj.value() + y);
+        } else if y + height > page {
+            adj.set_value(adj.value() + (y + height - page));
+        }
     }
 
     fn notify(self: &Rc<Self>) {
