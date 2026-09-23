@@ -214,6 +214,22 @@ impl MainWindow {
                 provider.connect_query(move || s.request_issue_sync());
             }
             this.view.completion().add_provider(&provider);
+
+            // Deleting back to a bare `#` empties the word being completed, at
+            // which point GtkSourceView ends the session — and deletion never
+            // re-triggers it, only typing `#` does. So when an edit leaves the
+            // caret right after a `#`, offer the list again.
+            let completion = this.view.completion();
+            this.buffer.connect_changed(move |buf| {
+                let mut probe = buf.iter_at_mark(&buf.get_insert());
+                if !(probe.backward_char() && probe.char() == '#') {
+                    return;
+                }
+                let completion = completion.clone();
+                // Deferred: showing while `changed` is still being emitted
+                // re-enters GtkSourceView's handling of the very same edit.
+                glib::idle_add_local_once(move || completion.show());
+            });
         }
 
         {
