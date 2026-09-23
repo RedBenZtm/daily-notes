@@ -106,8 +106,10 @@ pub struct Activity {
     pub text: String,
     pub url: Option<String>,
     pub project: String,
-    /// A GitLab reference like `!313`, for inserting into a note.
-    pub reference: Option<String>,
+    /// The line to append to a note: always set, and always rendering as
+    /// something clickable — a GitLab reference where there is one, a markdown
+    /// link otherwise.
+    pub insert: String,
 }
 
 // NOTE: every one of these calls passes a *literal* to gettext. Wrapping it
@@ -115,7 +117,12 @@ pub struct Activity {
 // extractor, and the strings silently never reach the catalogue — which is
 // exactly what happened here the first time.
 /// Turns an event into a line of prose, in the user's language.
-pub fn describe(e: &EventRec, project_path: &str, project_web_url: &str) -> Activity {
+pub fn describe(
+    e: &EventRec,
+    project_path: &str,
+    project_web_url: &str,
+    main_project: &str,
+) -> Activity {
     let at = e.created_at.with_timezone(&Local);
     let iid = e.target_iid.unwrap_or_default();
     let title = e.target_title.clone().unwrap_or_default();
@@ -182,13 +189,31 @@ pub fn describe(e: &EventRec, project_path: &str, project_web_url: &str) -> Acti
         _ => describe_push(e, project_web_url),
     };
 
+    // What to write into a note. A bare `#123` only resolves against the main
+    // project, so an event from anywhere else needs the qualified form or it
+    // silently points at the wrong issue — or none at all.
+    let insert = match (&reference, &url) {
+        (Some(r), _) => {
+            let qualified = if project_path.is_empty() || project_path == main_project {
+                r.clone()
+            } else {
+                format!("{project_path}{r}")
+            };
+            text.replacen(r.as_str(), &qualified, 1)
+        }
+        // No GitLab reference — a push, a branch, a wiki edit. A markdown link
+        // keeps it clickable and reads the same as the row it came from.
+        (None, Some(u)) => format!("[{text}]({u})"),
+        (None, None) => text.clone(),
+    };
+
     Activity {
         at,
         icon,
         text,
         url,
         project: project_path.to_string(),
-        reference,
+        insert,
     }
 }
 
@@ -232,5 +257,106 @@ fn describe_push(
                 None,
             )
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn event(action: &str, target: &str, iid: u64) -> EventRec {
+        EventRec {
+            id: 1,
+            project_id: 1,
+            action_name: action.into(),
+            target_type: Some(target.into()),
+            target_iid: Some(iid),
+            target_title: Some("Some title".into()),
+            created_at: "2026-09-23T07:21:54.394Z".parse().unwrap(),
+            push_data: None,
+            note: None,
+            wiki_page: None,
+        }
+    }
+
+    fn push(action: &str, branch: &str, commits: u64) -> EventRec {
+        EventRec {
+            push_data: Some(PushData {
+                commit_count: commits,
+                action: action.into(),
+                ref_: None,
+                reference: Some(branch.into()),
+                commit_title: None,
+            }),
+            ..event("pushed to", "Project", 0)
+        }
+    }
+
+    const MAIN: &str = "group/project";
+    const URL: &str = "https://gl/group/project";
+
+    #[test]
+    fn a_reference_is_not_repeated_in_the_inserted_line() {
+        // The text already names the merge request; appending it again gave
+        // lines like "!313 opened !313".
+        let a = describe(&event("opened", "MergeRequest", 313), MAIN, URL, MAIN);
+        assert_eq!(a.insert.matches("313").count(), 1);
+        assert!(a.insert.contains("!313"));
+    }
+
+    #[test]
+    fn a_reference_outside_the_main_project_is_qualified() {
+        // A bare `!313` resolves against the main project, where that merge
+        // request does not exist — so it has to carry its own project.
+        let other = "group/sub/other-project";
+        // Where the reference sits in the sentence depends on the language,
+        // so assert on the reference itself rather than on the word order.
+        let a = describe(&event("opened", "MergeRequest", 313), other, URL, MAIN);
+        assert!(a.insert.contains(&format!("{other}!313")), "{}", a.insert);
+        // ...and stays short when it is the main project after all
+        let a = describe(&event("opened", "MergeRequest", 313), MAIN, URL, MAIN);
+        assert!(a.insert.contains("!313"), "{}", a.insert);
+        assert!(!a.insert.contains(MAIN), "{}", a.insert);
+    }
+
+    #[test]
+    fn issues_qualify_the_same_way() {
+        let other = "other/project";
+        let a = describe(&event("opened", "Issue", 890), other, URL, MAIN);
+        assert!(a.insert.contains(&format!("{other}#890")), "{}", a.insert);
+    }
+
+    #[test]
+    fn an_activity_without_a_reference_becomes_a_markdown_link() {
+        // Pushes, branches and wiki edits name nothing GitLab can resolve, but
+        // they still have to go into a note as something clickable.
+        let a = describe(&push("pushed", "staging", 7), MAIN, URL, MAIN);
+        assert!(a.insert.starts_with('['), "{}", a.insert);
+        assert!(a.insert.contains("](https://gl/group/project/-/commits/staging)"), "{}", a.insert);
+    }
+
+    #[test]
+    fn every_activity_yields_something_insertable() {
+        let cases = [
+            event("opened", "MergeRequest", 1),
+            event("accepted", "MergeRequest", 2),
+            event("closed", "Issue", 3),
+            event("updated", "WikiPage::Meta", 4),
+            push("created", "feat/x", 1),
+            push("removed", "feat/x", 0),
+            push("pushed", "main", 12),
+        ];
+        for e in cases {
+            let a = describe(&e, MAIN, URL, MAIN);
+            assert!(!a.insert.trim().is_empty(), "{:?} produced nothing", e.action_name);
+        }
+    }
+
+    #[test]
+    fn the_local_day_decides_not_the_utc_timestamp() {
+        // 07:21 UTC is the same day in CEST, but the bounds sent to the API are
+        // deliberately a day wider at each end.
+        let a = describe(&event("opened", "Issue", 1), MAIN, URL, MAIN);
+        assert_eq!(a.at.naive_utc().format("%H:%M").to_string(), "07:21");
     }
 }

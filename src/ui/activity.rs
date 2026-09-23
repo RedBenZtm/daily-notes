@@ -125,7 +125,7 @@ impl Activity {
                 .borrow()
                 .project(rec.project_id)
                 .unwrap_or_else(|| (String::new(), String::new()));
-            let a = events::describe(rec, &path, &web_url);
+            let a = events::describe(rec, &path, &web_url, &cfg.gitlab.main_project);
             self.list.append(&self.row(&a, show_project));
         }
     }
@@ -177,21 +177,22 @@ impl Activity {
         row.append(&lines);
 
         // The one place the timeline feeds the notes rather than just sitting
-        // beside them.
-        if let Some(reference) = a.reference.clone() {
-            let insert = gtk::Button::from_icon_name("list-add-symbolic");
-            insert.add_css_class("flat");
-            insert.set_valign(gtk::Align::Start);
-            insert.set_tooltip_text(Some(&gettext("Add to the note")));
+        // beside them. Every activity can be added, not only the ones that
+        // name an issue or a merge request.
+        let insert = gtk::Button::from_icon_name("list-add-symbolic");
+        insert.add_css_class("flat");
+        insert.set_valign(gtk::Align::Start);
+        insert.set_tooltip_text(Some(&gettext("Add to the note")));
+        {
             let s = self.clone();
-            let line = format!("{} {}", a.text, reference);
+            let line = a.insert.clone();
             insert.connect_clicked(move |_| {
                 if let Some(cb) = s.on_insert.borrow().as_ref() {
                     cb(line.clone());
                 }
             });
-            row.append(&insert);
         }
+        row.append(&insert);
 
         row.upcast()
     }
