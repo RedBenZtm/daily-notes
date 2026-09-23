@@ -142,15 +142,24 @@ mod provider {
         }
 
         fn refilter(&self, context: &sourceview5::CompletionContext, model: &gio::ListModel) {
-            // Typing more characters after `#` refilters rather than
-            // repopulating, so without this the list would stay as it was.
+            // Strictly removal, which is what this call is for: "previously
+            // matched items may be removed from the list instead of generating
+            // new results". Clearing the model and appending fresh items
+            // mutates a list the completion is actively displaying, and that
+            // is what broke the popup on the first extra character typed.
             let Some(list) = model.downcast_ref::<gio::ListStore>() else {
                 return;
             };
-            let rows = self.matches(&super::query_of(context));
-            list.remove_all();
-            for (iid, title, state) in rows {
-                list.append(&super::IssueProposal::new(iid, &title, &state));
+            let query = super::query_of(context);
+            let mut i = list.n_items();
+            while i > 0 {
+                i -= 1;
+                let Some(p) = list.item(i).and_downcast::<super::IssueProposal>() else {
+                    continue;
+                };
+                if !super::matches(p.iid(), &p.title(), &query) {
+                    list.remove(i);
+                }
             }
         }
 
@@ -169,7 +178,19 @@ mod provider {
                 sourceview5::CompletionColumn::TypedText => {
                     cell.set_text(Some(&format!("#{}", p.iid())))
                 }
-                sourceview5::CompletionColumn::Comment => cell.set_text(Some(&p.title())),
+                // The title goes right beside the number rather than in the
+                // Comment column, which GtkSourceView right-aligns and squeezes
+                // out first — leaving a list of bare numbers that say nothing
+                // about which ticket is which.
+                sourceview5::CompletionColumn::After => {
+                    let title = super::elide(&p.title(), 72);
+                    cell.set_markup(&format!(
+                        "  <span alpha='65%'>{}</span>",
+                        glib::markup_escape_text(&title)
+                    ));
+                }
+                // The full title, for the details pane.
+                sourceview5::CompletionColumn::Details => cell.set_text(Some(&p.title())),
                 _ => cell.set_text(None),
             }
         }
@@ -225,6 +246,28 @@ impl IssueCompletion {
     }
 }
 
+/// Whether an issue still matches what has been typed.
+///
+/// Mirrors the SQL behind `populate` so that narrowing an open popup and
+/// opening a fresh one agree: digits match the issue number by prefix, and
+/// anything matches a title substring, case-insensitively.
+pub fn matches(iid: u64, title: &str, query: &str) -> bool {
+    if query.is_empty() {
+        return true;
+    }
+    let q = query.to_lowercase();
+    iid.to_string().starts_with(&q) || title.to_lowercase().contains(&q)
+}
+
+/// Keeps a long title from stretching the popup across the screen.
+fn elide(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        return s.to_string();
+    }
+    let kept: String = s.chars().take(max.saturating_sub(1)).collect();
+    format!("{}…", kept.trim_end())
+}
+
 fn no_matches() -> glib::Error {
     glib::Error::new(gio::IOErrorEnum::NotFound, "no matching issues")
 }
@@ -237,5 +280,47 @@ fn query_of(context: &sourceview5::CompletionContext) -> String {
             text.trim_start_matches('#').to_string()
         }
         None => String::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::matches;
+
+    #[test]
+    fn digits_match_the_issue_number_by_prefix() {
+        assert!(matches(890, "Cleanup Daten CMS", "89"));
+        assert!(matches(89, "Unrelated", "89"));
+        assert!(!matches(12, "Unrelated", "89"));
+        // a number appearing in the title counts too
+        assert!(matches(12, "Number 89 in the title", "89"));
+    }
+
+    #[test]
+    fn words_match_the_title_case_insensitively() {
+        assert!(matches(890, "Cleanup Daten CMS", "cleanup"));
+        assert!(matches(890, "Cleanup Daten CMS", "DATEN"));
+        assert!(!matches(890, "Cleanup Daten CMS", "minio"));
+    }
+
+    #[test]
+    fn an_empty_query_matches_everything() {
+        assert!(matches(1, "anything", ""));
+    }
+
+    #[test]
+    fn narrowing_only_ever_removes() {
+        // What refilter relies on: a longer query never matches more.
+        let items = [(890, "Cleanup Daten CMS"), (89, "Other"), (12, "Number 89 here")];
+        for (short, long) in [("8", "89"), ("89", "890"), ("cle", "clean")] {
+            for (iid, title) in items {
+                if matches(iid, title, long) {
+                    assert!(
+                        matches(iid, title, short),
+                        "{iid} {title:?} matched {long:?} but not {short:?}"
+                    );
+                }
+            }
+        }
     }
 }
