@@ -82,6 +82,29 @@ mod provider {
 
     impl ObjectImpl for IssueCompletion {}
 
+    impl IssueCompletion {
+        /// Issues matching what has been typed, from the local cache.
+        fn matches(&self, query: &str) -> Vec<(u64, String, String)> {
+            let Some(store) = self.store.borrow().clone() else {
+                return Vec::new();
+            };
+            let cfg = crate::config::load();
+            if !cfg.gitlab.is_configured() {
+                return Vec::new();
+            }
+            match store
+                .borrow()
+                .complete_issues(&cfg.gitlab.main_project, query, 20)
+            {
+                Ok(rows) => rows,
+                Err(e) => {
+                    tracing::warn!(?e, "could not list issues for completion");
+                    Vec::new()
+                }
+            }
+        }
+    }
+
     impl CompletionProviderImpl for IssueCompletion {
         fn is_trigger(&self, _iter: &gtk::TextIter, c: char) -> bool {
             c == '#'
@@ -95,36 +118,40 @@ mod provider {
             &self,
             context: &sourceview5::CompletionContext,
         ) -> Result<gio::ListModel, glib::Error> {
-            let store = self.store.borrow().clone();
-            let list = gio::ListStore::new::<super::IssueProposal>();
-
-            let Some(store) = store else {
-                return Ok(list.upcast());
-            };
-            let cfg = crate::config::load();
-            if !cfg.gitlab.is_configured() {
-                return Ok(list.upcast());
-            }
-
-            let query = super::query_of(context);
             // Ask for a refresh of the cache, but serve this popup from what
-            // is already there.
+            // is already there — typing must not wait on the API.
             if let Some(cb) = self.on_query.borrow().as_ref() {
                 cb();
             }
-
-            match store
-                .borrow()
-                .complete_issues(&cfg.gitlab.main_project, &query, 20)
-            {
-                Ok(rows) => {
-                    for (iid, title, state) in rows {
-                        list.append(&super::IssueProposal::new(iid, &title, &state));
-                    }
-                }
-                Err(e) => tracing::warn!(?e, "could not list issues for completion"),
+            let query = super::query_of(context);
+            let rows = self.matches(&query);
+            if rows.is_empty() {
+                // "No proposals" is an error by this interface's contract, not
+                // an empty model. Handing back an empty model makes
+                // GtkSourceCompletion count the provider as having results and
+                // present a zero-width popup — which fails
+                // `gdk_popup_present: assertion 'width > 0'` and leaves
+                // completion wedged for the rest of the session.
+                return Err(no_matches());
+            }
+            let list = gio::ListStore::new::<super::IssueProposal>();
+            for (iid, title, state) in rows {
+                list.append(&super::IssueProposal::new(iid, &title, &state));
             }
             Ok(list.upcast())
+        }
+
+        fn refilter(&self, context: &sourceview5::CompletionContext, model: &gio::ListModel) {
+            // Typing more characters after `#` refilters rather than
+            // repopulating, so without this the list would stay as it was.
+            let Some(list) = model.downcast_ref::<gio::ListStore>() else {
+                return;
+            };
+            let rows = self.matches(&super::query_of(context));
+            list.remove_all();
+            for (iid, title, state) in rows {
+                list.append(&super::IssueProposal::new(iid, &title, &state));
+            }
         }
 
         fn display(
@@ -196,6 +223,10 @@ impl IssueCompletion {
     pub fn connect_query(&self, f: impl Fn() + 'static) {
         *provider::IssueCompletion::from_obj(self).on_query.borrow_mut() = Some(Box::new(f));
     }
+}
+
+fn no_matches() -> glib::Error {
+    glib::Error::new(gio::IOErrorEnum::NotFound, "no matching issues")
 }
 
 /// What has been typed after the `#`.
