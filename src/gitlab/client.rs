@@ -14,6 +14,11 @@ pub enum Probe {
     /// The instance URL redirects; the payload is where it points.
     Redirect(String),
     Unauthorized,
+    /// The token works, but cannot see the configured main project — the case
+    /// a project access token hits, since it is scoped to one project. Worth
+    /// its own message: /version succeeds, so everything looks fine while
+    /// every reference silently resolves to "not found".
+    ProjectUnreachable(String),
     Failed(String),
 }
 
@@ -137,7 +142,27 @@ impl Client {
     }
 
     /// Cheap call used by Settings' "Test connection".
-    pub async fn probe(&self) -> Probe {
+    ///
+    /// Checks the main project too, not just that the credentials work.
+    pub async fn probe(&self, main_project: &str) -> Probe {
+        let version = self.probe_version().await;
+        let Probe::Ok(_) = &version else {
+            return version;
+        };
+        if main_project.trim().is_empty() {
+            return version;
+        }
+        match self
+            .get::<serde_json::Value>(&format!("projects/{}", encode_path(main_project)))
+            .await
+        {
+            Ok(Some(_)) => version,
+            Ok(None) => Probe::ProjectUnreachable(main_project.to_string()),
+            Err(e) => Probe::Failed(format!("{e:#}")),
+        }
+    }
+
+    async fn probe_version(&self) -> Probe {
         let url = format!("{}/api/v4/version", self.base);
         let res = match self
             .http

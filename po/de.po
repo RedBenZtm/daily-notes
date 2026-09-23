@@ -66,12 +66,12 @@ msgstr "Einstellungen"
 msgid "Quit"
 msgstr "Beenden"
 
-#: src/ui/preview.rs:88
+#: src/ui/preview.rs:95
 msgid "Nothing written yet"
 msgstr "Noch nichts geschrieben"
 
 #. Translators: {} is a keyboard key, shown literally.
-#: src/ui/preview.rs:90
+#: src/ui/preview.rs:97
 msgid "Press {} to start writing."
 msgstr "Zum Schreiben {} drücken."
 
@@ -87,7 +87,7 @@ msgstr "Letzter Arbeitstag"
 msgid "Open"
 msgstr "Öffnen"
 
-#: src/ui/quicknote.rs:281 src/ui/window.rs:60 src/ui/window.rs:421
+#: src/ui/quicknote.rs:281 src/ui/window.rs:60 src/ui/window.rs:436
 msgid "Today"
 msgstr "Heute"
 
@@ -108,8 +108,8 @@ msgid "Delete entry"
 msgstr "Eintrag löschen"
 
 #: src/ui/refs.rs:241
-msgid "Not found on GitLab"
-msgstr "Auf GitLab nicht gefunden"
+msgid "Not found, or not visible to this token"
+msgstr "Nicht gefunden oder für dieses Token nicht sichtbar"
 
 #: src/ui/refs.rs:267
 msgid "open"
@@ -210,20 +210,25 @@ msgid "Testing…"
 msgstr "Wird getestet …"
 
 #. Translators: {} is the GitLab version, e.g. "17.4.1".
-#: src/ui/settings.rs:183
+#: src/ui/settings.rs:184
 msgid "Connected to GitLab {}"
 msgstr "Mit GitLab {} verbunden"
 
 #. Translators: {} is a URL like https://gitlab.example.com.
-#: src/ui/settings.rs:192
+#: src/ui/settings.rs:193
 msgid "This address redirects. Use {} instead."
 msgstr "Diese Adresse leitet weiter. Bitte {} verwenden."
 
-#: src/ui/settings.rs:197
+#: src/ui/settings.rs:198
 msgid "The token was rejected"
 msgstr "Das Token wurde abgelehnt"
 
-#: src/ui/settings.rs:201 src/ui/settings.rs:203
+#. Translators: {} is a project path like group/project.
+#: src/ui/settings.rs:204
+msgid "Connected, but this token cannot see {}"
+msgstr "Verbunden, aber dieses Token sieht {} nicht"
+
+#: src/ui/settings.rs:210 src/ui/settings.rs:212
 msgid "Connection failed"
 msgstr "Verbindung fehlgeschlagen"
 
@@ -257,24 +262,27 @@ msgstr "Bearbeiten ({})"
 msgid "Search all notes"
 msgstr "Alle Notizen durchsuchen"
 
-#: src/ui/window.rs:496
+#: src/ui/window.rs:511
 msgid "Type to search your notes."
 msgstr "Tippen, um Notizen zu durchsuchen."
 
-#: src/ui/window.rs:508
+#: src/ui/window.rs:523
 msgid "Search failed."
 msgstr "Suche fehlgeschlagen."
 
-#: src/ui/window.rs:517
+#: src/ui/window.rs:532
 msgid "No notes match “{}”."
 msgstr "Keine Notizen passen zu „{}“."
 
 #. Translators: {} is the number of search results.
-#: src/ui/window.rs:524
+#: src/ui/window.rs:539
 msgid "{} result"
 msgid_plural "{} results"
 msgstr[0] "{} Treffer"
 msgstr[1] "{} Treffer"
+
+#~ msgid "Not found on GitLab"
+#~ msgstr "Auf GitLab nicht gefunden"
 
 #~ msgctxt "placeholder"
 #~ msgid "group/project"

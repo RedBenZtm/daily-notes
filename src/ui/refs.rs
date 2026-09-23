@@ -238,7 +238,7 @@ impl RefDecorator {
                     format!(
                         "<b>{}</b>\n<small>{}</small>",
                         glib::markup_escape_text(raw),
-                        glib::markup_escape_text(&gettext("Not found on GitLab"))
+                        glib::markup_escape_text(&gettext("Not found, or not visible to this token"))
                     ),
                     None,
                 ),

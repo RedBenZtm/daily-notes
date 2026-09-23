@@ -166,9 +166,10 @@ Main project: group/project · Main group: group",
 
                 let (tx, rx) = async_channel::bounded::<Probe>(1);
                 let base = cfg.gitlab.base().to_string();
+                let project = cfg.gitlab.main_project.clone();
                 rt.spawn(async move {
                     let probe = match crate::gitlab::client::Client::new(&base, &tok) {
-                        Ok(c) => c.probe().await,
+                        Ok(c) => c.probe(&project).await,
                         Err(e) => Probe::Failed(format!("{e:#}")),
                     };
                     let _ = tx.force_send(probe);
@@ -195,6 +196,14 @@ Main project: group/project · Main group: group",
                         }
                         Ok(Probe::Unauthorized) => {
                             s2.status.set_title(&gettext("The token was rejected"))
+                        }
+                        Ok(Probe::ProjectUnreachable(project)) => {
+                            tracing::warn!(%project, "the token cannot see the main project");
+                            s2.status.set_title(
+                                // Translators: {} is a project path like group/project.
+                                &gettext("Connected, but this token cannot see {}")
+                                    .replace("{}", &project),
+                            );
                         }
                         Ok(Probe::Failed(e)) => {
                             tracing::warn!(%e, "connection test failed");
