@@ -7,6 +7,7 @@ use adw::prelude::*;
 use gtk::glib;
 
 use crate::config;
+use crate::gitlab::client::Probe;
 use crate::i18n::gettext;
 
 pub struct Settings {
@@ -163,27 +164,39 @@ Main project: group/project · Main group: group",
                 button.set_sensitive(false);
                 s.status.set_title(&gettext("Testing…"));
 
-                let (tx, rx) = async_channel::bounded::<Result<String, String>>(1);
+                let (tx, rx) = async_channel::bounded::<Probe>(1);
                 let base = cfg.gitlab.base().to_string();
                 rt.spawn(async move {
-                    let res = async {
-                        let c = crate::gitlab::client::Client::new(&base, &tok)
-                            .map_err(|e| format!("{e:#}"))?;
-                        c.version().await.map_err(|e| format!("{e:#}"))
-                    }
-                    .await;
-                    let _ = tx.force_send(res);
+                    let probe = match crate::gitlab::client::Client::new(&base, &tok) {
+                        Ok(c) => c.probe().await,
+                        Err(e) => Probe::Failed(format!("{e:#}")),
+                    };
+                    let _ = tx.force_send(probe);
                 });
 
                 let s2 = s.clone();
                 let button = button.clone();
                 glib::spawn_future_local(async move {
                     match rx.recv().await {
-                        Ok(Ok(v)) => s2.status.set_title(
+                        Ok(Probe::Ok(v)) => s2.status.set_title(
                             // Translators: {} is the GitLab version, e.g. "17.4.1".
                             &gettext("Connected to GitLab {}").replace("{}", &v),
                         ),
-                        Ok(Err(e)) => {
+                        Ok(Probe::Redirect(base)) => {
+                            // Worth naming: a redirecting base URL also decodes
+                            // the %2F in project paths, so every lookup 404s
+                            // with nothing to explain why.
+                            tracing::warn!(%base, "the instance URL redirects");
+                            s2.status.set_title(
+                                // Translators: {} is a URL like https://gitlab.example.com.
+                                &gettext("This address redirects. Use {} instead.")
+                                    .replace("{}", &base),
+                            );
+                        }
+                        Ok(Probe::Unauthorized) => {
+                            s2.status.set_title(&gettext("The token was rejected"))
+                        }
+                        Ok(Probe::Failed(e)) => {
                             tracing::warn!(%e, "connection test failed");
                             s2.status.set_title(&gettext("Connection failed"))
                         }

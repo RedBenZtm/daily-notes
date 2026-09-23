@@ -17,16 +17,16 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
 #. Translators: tray submenu, {} is a date like "Wed 23 Sep".
-#: src/app.rs:78
+#: src/app.rs:81
 msgid "Today · {}"
 msgstr "Hoy · {}"
 
 #. Translators: tray submenu, {} is a date like "Tue 22 Sep".
-#: src/app.rs:83
+#: src/app.rs:86
 msgid "Last workday · {}"
 msgstr "Último día laborable · {}"
 
-#: src/app.rs:84 src/ui/quicknote.rs:428
+#: src/app.rs:87 src/ui/quicknote.rs:507
 msgid "No earlier notes"
 msgstr "No hay notas anteriores"
 
@@ -38,7 +38,7 @@ msgstr "(sin entradas)"
 msgid "Open in window"
 msgstr "Abrir en una ventana"
 
-#: src/tray/mod.rs:156 src/tray/mod.rs:175 src/ui/quicknote.rs:35
+#: src/tray/mod.rs:156 src/tray/mod.rs:175 src/ui/quicknote.rs:40
 #: src/ui/window.rs:49 src/ui/window.rs:142
 msgid "Daily Notes"
 msgstr "Notas diarias"
@@ -50,15 +50,15 @@ msgid_plural "{} entries today"
 msgstr[0] "{} entrada hoy"
 msgstr[1] "{} entradas hoy"
 
-#: src/tray/mod.rs:198 src/ui/quicknote.rs:100
+#: src/tray/mod.rs:198 src/ui/quicknote.rs:105
 msgid "Quick Note"
 msgstr "Nota rápida"
 
-#: src/tray/mod.rs:208 src/ui/quicknote.rs:49
+#: src/tray/mod.rs:208 src/ui/quicknote.rs:54
 msgid "Search…"
 msgstr "Buscar…"
 
-#: src/tray/mod.rs:214 src/ui/settings.rs:111
+#: src/tray/mod.rs:214 src/ui/settings.rs:112
 msgid "Settings"
 msgstr "Preferencias"
 
@@ -66,35 +66,35 @@ msgstr "Preferencias"
 msgid "Quit"
 msgstr "Salir"
 
-#: src/ui/quicknote.rs:43
+#: src/ui/quicknote.rs:48
 msgid "Add an entry…"
 msgstr "Añadir una entrada…"
 
-#: src/ui/quicknote.rs:48
+#: src/ui/quicknote.rs:53
 msgid "Last workday"
 msgstr "Último día laborable"
 
-#: src/ui/quicknote.rs:50
+#: src/ui/quicknote.rs:55
 msgid "Open"
 msgstr "Abrir"
 
-#: src/ui/quicknote.rs:248 src/ui/window.rs:56 src/ui/window.rs:290
+#: src/ui/quicknote.rs:315 src/ui/window.rs:56 src/ui/window.rs:290
 msgid "Today"
 msgstr "Hoy"
 
-#: src/ui/quicknote.rs:260
+#: src/ui/quicknote.rs:327
 msgid "Nothing yet today"
 msgstr "Nada todavía hoy"
 
-#: src/ui/quicknote.rs:261
+#: src/ui/quicknote.rs:328
 msgid "Type below to add your first entry."
 msgstr "Escribe abajo para añadir tu primera entrada."
 
-#: src/ui/quicknote.rs:284
+#: src/ui/quicknote.rs:351
 msgid "Drag to reorder"
 msgstr "Arrastra para reordenar"
 
-#: src/ui/quicknote.rs:294
+#: src/ui/quicknote.rs:373
 msgid "Delete entry"
 msgstr "Eliminar entrada"
 
@@ -122,27 +122,27 @@ msgstr "bloqueada"
 msgid "active"
 msgstr "activo"
 
-#: src/ui/settings.rs:30
+#: src/ui/settings.rs:31
 msgid "Instance URL"
 msgstr "URL de la instancia"
 
-#: src/ui/settings.rs:35
+#: src/ui/settings.rs:36
 msgid "Personal access token"
 msgstr "Token de acceso personal"
 
-#: src/ui/settings.rs:44
+#: src/ui/settings.rs:45
 msgid "Main project"
 msgstr "Proyecto principal"
 
-#: src/ui/settings.rs:48
+#: src/ui/settings.rs:49
 msgid "Main group"
 msgstr "Grupo principal"
 
-#: src/ui/settings.rs:53
+#: src/ui/settings.rs:54
 msgid "How references resolve"
 msgstr "Cómo se resuelven las referencias"
 
-#: src/ui/settings.rs:62
+#: src/ui/settings.rs:63
 msgid ""
 "#123 and !45 resolve in the main project; &7 in the main group. Write group/"
 "project#123 to reach another project."
@@ -150,23 +150,23 @@ msgstr ""
 "#123 y !45 se resuelven en el proyecto principal; &7 en el grupo principal. "
 "Escribe grupo/proyecto#123 para otro proyecto."
 
-#: src/ui/settings.rs:68
+#: src/ui/settings.rs:69
 msgid "The token is stored in the GNOME keyring"
 msgstr "El token se guarda en el depósito de claves de GNOME"
 
-#: src/ui/settings.rs:72
+#: src/ui/settings.rs:73
 msgid "It needs the read_api scope. Leave blank to keep the current one."
 msgstr "Necesita el ámbito read_api. Déjalo vacío para conservar el actual."
 
-#: src/ui/settings.rs:76
+#: src/ui/settings.rs:77
 msgid "Test connection"
 msgstr "Probar la conexión"
 
-#: src/ui/settings.rs:78
+#: src/ui/settings.rs:79
 msgid "Not tested"
 msgstr "Sin probar"
 
-#: src/ui/settings.rs:85 src/ui/settings.rs:105
+#: src/ui/settings.rs:86 src/ui/settings.rs:106
 msgid "GitLab"
 msgstr "GitLab"
 
@@ -175,34 +175,45 @@ msgstr "GitLab"
 #. of the way, so an in-field placeholder renders on top of it.
 #. Translators: the example values are formats, not real addresses —
 #. keep the URL as-is, but do translate "group/project" and "group".
-#: src/ui/settings.rs:93
+#: src/ui/settings.rs:94
 msgid ""
 "Instance URL: https://gitlab.example.com\n"
 "Main project: group/project · Main group: group"
-msgstr "URL de la instancia: https://gitlab.example.com\nProyecto principal: grupo/proyecto · Grupo principal: grupo"
+msgstr ""
+"URL de la instancia: https://gitlab.example.com\n"
+"Proyecto principal: grupo/proyecto · Grupo principal: grupo"
 
-#: src/ui/settings.rs:141
+#: src/ui/settings.rs:142
 msgid "Could not store the token"
 msgstr "No se pudo guardar el token"
 
-#: src/ui/settings.rs:156
+#: src/ui/settings.rs:157
 msgid "No token stored yet"
 msgstr "Todavía no hay ningún token guardado"
 
-#: src/ui/settings.rs:160
+#: src/ui/settings.rs:161
 msgid "Enter the instance URL first"
 msgstr "Introduce primero la URL de la instancia"
 
-#: src/ui/settings.rs:164
+#: src/ui/settings.rs:165
 msgid "Testing…"
 msgstr "Probando…"
 
 #. Translators: {} is the GitLab version, e.g. "17.4.1".
-#: src/ui/settings.rs:184
+#: src/ui/settings.rs:183
 msgid "Connected to GitLab {}"
 msgstr "Conectado a GitLab {}"
 
-#: src/ui/settings.rs:188 src/ui/settings.rs:190
+#. Translators: {} is a URL like https://gitlab.example.com.
+#: src/ui/settings.rs:192
+msgid "This address redirects. Use {} instead."
+msgstr "Esta dirección redirige. Usa {} en su lugar."
+
+#: src/ui/settings.rs:197
+msgid "The token was rejected"
+msgstr "El token fue rechazado"
+
+#: src/ui/settings.rs:201 src/ui/settings.rs:203
 msgid "Connection failed"
 msgstr "Error de conexión"
 

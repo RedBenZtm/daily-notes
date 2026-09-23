@@ -7,6 +7,16 @@ use serde::Deserialize;
 
 use super::refs::{Kind, Reference};
 
+/// The outcome of a connection test, so Settings can say something specific.
+#[derive(Debug, Clone)]
+pub enum Probe {
+    Ok(String),
+    /// The instance URL redirects; the payload is where it points.
+    Redirect(String),
+    Unauthorized,
+    Failed(String),
+}
+
 /// What a resolved reference looks like to the UI.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Resolved {
@@ -82,6 +92,14 @@ impl Client {
             // paints from cache and these calls only ever refresh it.
             .timeout(Duration::from_secs(10))
             .connect_timeout(Duration::from_secs(5))
+            // Do not follow redirects. An API base URL should never redirect,
+            // and following one silently is actively harmful here: a vanity
+            // host that 301s to the canonical one also *decodes* the `%2F` in
+            // an encoded project path, so `projects/group%2Fproj/issues/1`
+            // becomes `projects/group/proj/issues/1` and every lookup 404s
+            // with no hint as to why. Better to report the redirect and name
+            // the URL that should have been configured.
+            .redirect(reqwest::redirect::Policy::none())
             .user_agent(concat!("daily-notes/", env!("CARGO_PKG_VERSION")))
             .build()
             .context("building the HTTP client")?;
@@ -104,6 +122,10 @@ impl Client {
 
         match res.status() {
             s if s.is_success() => Ok(Some(res.json::<T>().await.context("decoding the response")?)),
+            s if s.is_redirection() => match redirect_origin(&res) {
+                Some(base) => bail!("the instance URL redirects to {base}; configure that instead"),
+                None => bail!("the instance URL redirects ({s}); check it"),
+            },
             // A reference to something that does not exist, or that this token
             // cannot see, is a normal state — not an error to report.
             reqwest::StatusCode::NOT_FOUND | reqwest::StatusCode::FORBIDDEN => Ok(None),
@@ -115,9 +137,32 @@ impl Client {
     }
 
     /// Cheap call used by Settings' "Test connection".
-    pub async fn version(&self) -> Result<String> {
-        let v: Option<Version> = self.get("version").await?;
-        Ok(v.map(|v| v.version).unwrap_or_default())
+    pub async fn probe(&self) -> Probe {
+        let url = format!("{}/api/v4/version", self.base);
+        let res = match self
+            .http
+            .get(&url)
+            .header("PRIVATE-TOKEN", &self.token)
+            .send()
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => return Probe::Failed(format!("{e}")),
+        };
+        match res.status() {
+            s if s.is_success() => match res.json::<Version>().await {
+                Ok(v) => Probe::Ok(v.version),
+                Err(e) => Probe::Failed(format!("{e}")),
+            },
+            s if s.is_redirection() => match redirect_origin(&res) {
+                Some(base) => Probe::Redirect(base),
+                None => Probe::Failed(format!("{s}")),
+            },
+            reqwest::StatusCode::UNAUTHORIZED | reqwest::StatusCode::FORBIDDEN => {
+                Probe::Unauthorized
+            }
+            s => Probe::Failed(format!("{s}")),
+        }
     }
 
     #[allow(dead_code)]
@@ -182,6 +227,14 @@ impl Client {
             }
         }
     }
+}
+
+/// The scheme and host a redirect points at, which is what belongs in the
+/// instance URL setting.
+fn redirect_origin(res: &reqwest::Response) -> Option<String> {
+    let location = res.headers().get(reqwest::header::LOCATION)?.to_str().ok()?;
+    let url = reqwest::Url::parse(location).ok()?;
+    Some(url.origin().ascii_serialization())
 }
 
 impl From<Issueish> for Resolved {
