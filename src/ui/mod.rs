@@ -2,6 +2,7 @@ pub mod activity;
 pub mod completion;
 pub mod dates;
 pub mod editor;
+pub mod entry_completion;
 pub mod lines;
 pub mod markup;
 pub mod preview;

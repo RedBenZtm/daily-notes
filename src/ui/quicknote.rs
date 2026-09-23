@@ -16,6 +16,7 @@ use crate::i18n::gettext;
 use crate::gitlab::refs::Reference;
 use crate::store::{blocks, Block, Store};
 use crate::ui::markup;
+use crate::ui::entry_completion;
 use crate::ui::refs::{open_link, RefResolver};
 use crate::ui::dates;
 
@@ -34,6 +35,7 @@ pub struct QuickNote {
     /// Hands references the cache does not know yet to the resolver, so an
     /// entry written here eventually shows its ticket titles too.
     on_resolve: RefCell<Option<Box<dyn Fn(Vec<Reference>)>>>,
+    on_sync_issues: RefCell<Option<Box<dyn Fn()>>>,
 }
 
 impl QuickNote {
@@ -119,8 +121,14 @@ impl QuickNote {
             on_open_window: RefCell::new(None),
             on_search: RefCell::new(None),
             on_resolve: RefCell::new(None),
+            on_sync_issues: RefCell::new(None),
         });
 
+        {
+            // `#` offers the project's issues here too, not only in the editor.
+            let s = this.clone();
+            entry_completion::attach(&this.add, this.store.clone(), move || s.sync_issues());
+        }
         {
             let s = this.clone();
             this.add.connect_activate(move |e| {
@@ -197,6 +205,16 @@ impl QuickNote {
 
     pub fn connect_resolve_refs(self: &Rc<Self>, f: impl Fn(Vec<Reference>) + 'static) {
         *self.on_resolve.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn connect_sync_issues(self: &Rc<Self>, f: impl Fn() + 'static) {
+        *self.on_sync_issues.borrow_mut() = Some(Box::new(f));
+    }
+
+    fn sync_issues(self: &Rc<Self>) {
+        if let Some(cb) = self.on_sync_issues.borrow().as_ref() {
+            cb();
+        }
     }
 
     /// Renders one entry as Pango markup, turning links and resolved ticket
@@ -341,6 +359,10 @@ impl QuickNote {
 
         // --- edit mode ----------------------------------------------------
         let entry = gtk::Entry::builder().text(&block.text).hexpand(true).build();
+        {
+            let s = self.clone();
+            entry_completion::attach(&entry, self.store.clone(), move || s.sync_issues());
+        }
         let edit = gtk::Box::new(gtk::Orientation::Horizontal, 8);
         edit.set_margin_top(6);
         edit.set_margin_bottom(6);

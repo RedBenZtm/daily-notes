@@ -178,6 +178,10 @@ impl Session {
         }
         {
             let s = self.clone();
+            q.connect_sync_issues(move || s.sync_issues());
+        }
+        {
+            let s = self.clone();
             let app = app.clone();
             q.connect_search(move |date| {
                 let w = s.main_window(&app);
