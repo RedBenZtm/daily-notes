@@ -339,30 +339,36 @@ impl MainWindow {
         if self.view_stack.visible_child_name().as_deref() == Some("edit") {
             self.view.grab_focus();
         } else {
-            // Deliberately focus nothing. The rendered view is built from
-            // selectable labels, and a GtkLabel selects all of its text the
-            // moment it takes focus — so grabbing focus here highlighted the
-            // first line every time the view came back.
-            gtk::prelude::GtkWindowExt::set_focus(&self.window, gtk::Widget::NONE);
+            // Focus the mode toggle, which is exactly where focus lands when
+            // the button is clicked — so the shortcut and the button leave the
+            // window in the same state.
+            //
+            // It also has to go *somewhere* definite: the rendered view is
+            // built from selectable labels, and a GtkLabel selects all of its
+            // text the moment it takes focus. Leaving focus unset was not
+            // enough, because GTK then hands it to the first focusable widget
+            // on the next interaction — a label.
+            self.modes.grab_focus();
         }
     }
 
     /// Switches between the rendered view and the editor.
     pub fn set_mode(self: &Rc<Self>, mode: &str) {
-        if self.view_stack.visible_child_name().as_deref() == Some(mode) {
-            return;
+        if self.view_stack.visible_child_name().as_deref() != Some(mode) {
+            if mode == "preview" {
+                // The editor may hold unsaved keystrokes the rendered view
+                // would otherwise not show.
+                self.flush_save();
+                self.render_preview();
+            }
+            self.view_stack.set_visible_child_name(mode);
         }
-        if mode == "preview" {
-            // The editor may hold unsaved keystrokes the rendered view would
-            // otherwise not show.
-            self.flush_save();
-            self.render_preview();
-        }
-        self.view_stack.set_visible_child_name(mode);
         let index = if mode == "edit" { 1 } else { 0 };
         if self.modes.active() != index {
             self.modes.set_active(index);
         }
+        // Always, not only on a change: switching days also lands here with
+        // the mode already current, and focus still has to be settled.
         self.focus_current_mode();
     }
 
@@ -423,13 +429,12 @@ impl MainWindow {
 
         self.refresh_refs();
         // Selecting a day always shows it rendered; `e` or the toggle opens
-        // the editor.
+        // the editor. Going through set_mode keeps focus handling in one
+        // place — poking the stack directly left focus on the hidden editor,
+        // and GTK then moved it to the first focusable widget, a label.
         self.render_preview();
         self.preview.scroll_to_top();
-        self.view_stack.set_visible_child_name("preview");
-        if self.modes.active() != 0 {
-            self.modes.set_active(0);
-        }
+        self.set_mode("preview");
         self.title.set_title(&dates::short(date));
         let today = Local::now().date_naive();
         self.title.set_subtitle(&if date == today {
