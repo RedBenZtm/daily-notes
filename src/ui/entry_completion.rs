@@ -15,6 +15,9 @@ use crate::store::Store;
 
 const MAX_ROWS: usize = 8;
 
+/// Narrowest the popover may be, whatever the field's width.
+const MIN_WIDTH: i32 = 380;
+
 /// The `#`-token ending at `cursor`, as (byte offset of the `#`, query).
 ///
 /// The token is the run of non-whitespace before the caret; it counts only if
@@ -121,6 +124,11 @@ pub fn attach(
             if let Some(first) = list.row_at_index(0) {
                 list.select_row(Some(&first));
             }
+            // A popover sizes itself to its content, which for a list of issue
+            // titles means a narrow column with everything ellipsised. Match
+            // the field it belongs to, and never go below a width a title is
+            // actually readable at.
+            popover.set_size_request(entry.width().max(MIN_WIDTH), -1);
             popover.popup();
         })
     };
