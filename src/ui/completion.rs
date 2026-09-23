@@ -71,6 +71,9 @@ mod provider {
         /// Called with the typed query so the issue list can be refreshed in
         /// the background; the popup itself never waits for it.
         pub on_query: RefCell<Option<Box<dyn Fn()>>>,
+        /// What has been typed after `#`. The filter closure reads it, so
+        /// updating it and poking the filter is all refilter has to do.
+        pub query: Rc<RefCell<String>>,
     }
 
     #[glib::object_subclass]
@@ -83,8 +86,9 @@ mod provider {
     impl ObjectImpl for IssueCompletion {}
 
     impl IssueCompletion {
-        /// Issues matching what has been typed, from the local cache.
-        fn matches(&self, query: &str) -> Vec<(u64, String, String)> {
+        /// Every candidate issue for the project. Filtering happens in the
+        /// model, not here, so that deleting characters can bring entries back.
+        fn candidates(&self) -> Vec<(u64, String, String)> {
             let Some(store) = self.store.borrow().clone() else {
                 return Vec::new();
             };
@@ -94,7 +98,7 @@ mod provider {
             }
             match store
                 .borrow()
-                .complete_issues(&cfg.gitlab.main_project, query, 20)
+                .complete_issues(&cfg.gitlab.main_project, "", 500)
             {
                 Ok(rows) => rows,
                 Err(e) => {
@@ -123,8 +127,8 @@ mod provider {
             if let Some(cb) = self.on_query.borrow().as_ref() {
                 cb();
             }
-            let query = super::query_of(context);
-            let rows = self.matches(&query);
+            *self.query.borrow_mut() = super::query_of(context);
+            let rows = self.candidates();
             if rows.is_empty() {
                 // "No proposals" is an error by this interface's contract, not
                 // an empty model. Handing back an empty model makes
@@ -138,27 +142,33 @@ mod provider {
             for (iid, title, state) in rows {
                 list.append(&super::IssueProposal::new(iid, &title, &state));
             }
-            Ok(list.upcast())
+
+            // A filtered view over the full candidate list, rather than a
+            // pre-filtered store. Narrowing *and* widening then work: deleting
+            // back to a bare `#` brings every issue back, where a store that
+            // only ever had items removed would be left empty — and an empty
+            // model is what wedges the popup.
+            let query = self.query.clone();
+            let filter = gtk::CustomFilter::new(move |obj| {
+                obj.downcast_ref::<super::IssueProposal>()
+                    .map(|p| super::matches(p.iid(), &p.title(), &query.borrow()))
+                    .unwrap_or(false)
+            });
+            let model = gtk::FilterListModel::new(Some(list), Some(filter));
+            if model.n_items() == 0 {
+                return Err(no_matches());
+            }
+            Ok(model.upcast())
         }
 
         fn refilter(&self, context: &sourceview5::CompletionContext, model: &gio::ListModel) {
-            // Strictly removal, which is what this call is for: "previously
-            // matched items may be removed from the list instead of generating
-            // new results". Clearing the model and appending fresh items
-            // mutates a list the completion is actively displaying, and that
-            // is what broke the popup on the first extra character typed.
-            let Some(list) = model.downcast_ref::<gio::ListStore>() else {
-                return;
-            };
-            let query = super::query_of(context);
-            let mut i = list.n_items();
-            while i > 0 {
-                i -= 1;
-                let Some(p) = list.item(i).and_downcast::<super::IssueProposal>() else {
-                    continue;
-                };
-                if !super::matches(p.iid(), &p.title(), &query) {
-                    list.remove(i);
+            // Update the query and let the filter re-evaluate. The model is
+            // never mutated directly: it is a view, so items come back when
+            // the query shortens.
+            *self.query.borrow_mut() = super::query_of(context);
+            if let Some(m) = model.downcast_ref::<gtk::FilterListModel>() {
+                if let Some(f) = m.filter() {
+                    f.changed(gtk::FilterChange::Different);
                 }
             }
         }
