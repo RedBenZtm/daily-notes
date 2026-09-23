@@ -9,7 +9,7 @@ msgstr ""
 msgid "Last workday · {}"
 msgstr ""
 
-#: src/app.rs:97 src/ui/quicknote.rs:467
+#: src/app.rs:97 src/ui/quicknote.rs:525
 msgid "No earlier notes"
 msgstr ""
 
@@ -68,7 +68,7 @@ msgstr ""
 msgid "Open in window"
 msgstr ""
 
-#: src/tray/mod.rs:225 src/tray/mod.rs:244 src/ui/quicknote.rs:41 src/ui/window.rs:60 src/ui/window.rs:208
+#: src/tray/mod.rs:225 src/tray/mod.rs:244 src/ui/quicknote.rs:44 src/ui/window.rs:60 src/ui/window.rs:208
 msgid "Daily Notes"
 msgstr ""
 
@@ -79,11 +79,11 @@ msgid_plural "{} entries today"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/tray/mod.rs:267 src/ui/quicknote.rs:106
+#: src/tray/mod.rs:267 src/ui/quicknote.rs:114
 msgid "Quick Note"
 msgstr ""
 
-#: src/tray/mod.rs:294 src/ui/quicknote.rs:55
+#: src/tray/mod.rs:294
 msgid "Search…"
 msgstr ""
 
@@ -124,35 +124,44 @@ msgstr ""
 msgid "Press {} to start writing."
 msgstr ""
 
-#: src/ui/quicknote.rs:49
+#: src/ui/quicknote.rs:52
 msgid "Add an entry…"
 msgstr ""
 
-#: src/ui/quicknote.rs:54
-msgid "Last workday"
+#. Mnemonics, so the buttons are reachable without leaving the entry.
+#. The underscore is part of the translatable string: which letter is
+#. free depends on the language, so translators place it, not us. These
+#. are separate msgids from the tray's labels for that reason — a bare
+#. underscore means something else entirely in a dbusmenu label.
+#: src/ui/quicknote.rs:62
+msgid "_Last workday"
 msgstr ""
 
-#: src/ui/quicknote.rs:56
-msgid "Open"
+#: src/ui/quicknote.rs:63
+msgid "_Search…"
 msgstr ""
 
-#: src/ui/quicknote.rs:281 src/ui/window.rs:67 src/ui/window.rs:528
+#: src/ui/quicknote.rs:64
+msgid "_Open"
+msgstr ""
+
+#: src/ui/quicknote.rs:335 src/ui/window.rs:67 src/ui/window.rs:528
 msgid "Today"
 msgstr ""
 
-#: src/ui/quicknote.rs:293
+#: src/ui/quicknote.rs:347
 msgid "Nothing yet today"
 msgstr ""
 
-#: src/ui/quicknote.rs:294
+#: src/ui/quicknote.rs:348
 msgid "Type below to add your first entry."
 msgstr ""
 
-#: src/ui/quicknote.rs:317
+#: src/ui/quicknote.rs:371
 msgid "Drag to reorder"
 msgstr ""
 
-#: src/ui/quicknote.rs:330
+#: src/ui/quicknote.rs:384
 msgid "Delete entry"
 msgstr ""
 

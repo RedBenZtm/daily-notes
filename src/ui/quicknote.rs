@@ -54,9 +54,14 @@ impl QuickNote {
             .activates_default(false)
             .build();
 
-        let last_workday_btn = gtk::ToggleButton::with_label(&gettext("Last workday"));
-        let search = gtk::Button::with_label(&gettext("Search…"));
-        let open = gtk::Button::with_label(&gettext("Open"));
+        // Mnemonics, so the buttons are reachable without leaving the entry.
+        // The underscore is part of the translatable string: which letter is
+        // free depends on the language, so translators place it, not us. These
+        // are separate msgids from the tray's labels for that reason — a bare
+        // underscore means something else entirely in a dbusmenu label.
+        let last_workday_btn = gtk::ToggleButton::with_mnemonic(&gettext("_Last workday"));
+        let search = gtk::Button::with_mnemonic(&gettext("_Search…"));
+        let open = gtk::Button::with_mnemonic(&gettext("_Open"));
         open.add_css_class("suggested-action");
 
         let actions = gtk::Box::new(gtk::Orientation::Horizontal, 6);

@@ -26,7 +26,7 @@ msgstr "Aujourd’hui · {}"
 msgid "Last workday · {}"
 msgstr "Dernier jour ouvré · {}"
 
-#: src/app.rs:97 src/ui/quicknote.rs:467
+#: src/app.rs:97 src/ui/quicknote.rs:525
 msgid "No earlier notes"
 msgstr "Aucune note antérieure"
 
@@ -85,7 +85,7 @@ msgstr "(aucune entrée)"
 msgid "Open in window"
 msgstr "Ouvrir dans une fenêtre"
 
-#: src/tray/mod.rs:225 src/tray/mod.rs:244 src/ui/quicknote.rs:41
+#: src/tray/mod.rs:225 src/tray/mod.rs:244 src/ui/quicknote.rs:44
 #: src/ui/window.rs:60 src/ui/window.rs:208
 msgid "Daily Notes"
 msgstr "Notes quotidiennes"
@@ -97,11 +97,11 @@ msgid_plural "{} entries today"
 msgstr[0] "{} entrée aujourd’hui"
 msgstr[1] "{} entrées aujourd’hui"
 
-#: src/tray/mod.rs:267 src/ui/quicknote.rs:106
+#: src/tray/mod.rs:267 src/ui/quicknote.rs:114
 msgid "Quick Note"
 msgstr "Note rapide"
 
-#: src/tray/mod.rs:294 src/ui/quicknote.rs:55
+#: src/tray/mod.rs:294
 msgid "Search…"
 msgstr "Rechercher…"
 
@@ -142,35 +142,44 @@ msgstr "Rien d’écrit pour l’instant"
 msgid "Press {} to start writing."
 msgstr "Appuyez sur {} pour commencer à écrire."
 
-#: src/ui/quicknote.rs:49
+#: src/ui/quicknote.rs:52
 msgid "Add an entry…"
 msgstr "Ajouter une entrée…"
 
-#: src/ui/quicknote.rs:54
-msgid "Last workday"
-msgstr "Dernier jour ouvré"
+#. Mnemonics, so the buttons are reachable without leaving the entry.
+#. The underscore is part of the translatable string: which letter is
+#. free depends on the language, so translators place it, not us. These
+#. are separate msgids from the tray's labels for that reason — a bare
+#. underscore means something else entirely in a dbusmenu label.
+#: src/ui/quicknote.rs:62
+msgid "_Last workday"
+msgstr "_Dernier jour ouvré"
 
-#: src/ui/quicknote.rs:56
-msgid "Open"
-msgstr "Ouvrir"
+#: src/ui/quicknote.rs:63
+msgid "_Search…"
+msgstr "_Rechercher…"
 
-#: src/ui/quicknote.rs:281 src/ui/window.rs:67 src/ui/window.rs:528
+#: src/ui/quicknote.rs:64
+msgid "_Open"
+msgstr "_Ouvrir"
+
+#: src/ui/quicknote.rs:335 src/ui/window.rs:67 src/ui/window.rs:528
 msgid "Today"
 msgstr "Aujourd’hui"
 
-#: src/ui/quicknote.rs:293
+#: src/ui/quicknote.rs:347
 msgid "Nothing yet today"
 msgstr "Rien pour le moment"
 
-#: src/ui/quicknote.rs:294
+#: src/ui/quicknote.rs:348
 msgid "Type below to add your first entry."
 msgstr "Saisissez ci-dessous pour ajouter votre première entrée."
 
-#: src/ui/quicknote.rs:317
+#: src/ui/quicknote.rs:371
 msgid "Drag to reorder"
 msgstr "Faites glisser pour réorganiser"
 
-#: src/ui/quicknote.rs:330
+#: src/ui/quicknote.rs:384
 msgid "Delete entry"
 msgstr "Supprimer l’entrée"
 
