@@ -214,13 +214,24 @@ impl MainWindow {
             this.preview.connect_edit_requested(move || s.set_mode("edit"));
         }
 
-        // `e` opens the editor. Safe as a bare key: the rendered view has
-        // nowhere to type, and the shortcut lives on it rather than on the
-        // window, so it cannot fire while editing or while searching.
+        // `e` opens the editor. It sits on the window rather than on the
+        // rendered view, because the rendered view deliberately holds no focus
+        // (see focus_current_mode). The guards below are what keep a bare
+        // letter key safe: it only acts in the rendered view, and never while
+        // the caret is in something typable such as the search entry.
         let keys = gtk::EventControllerKey::new();
+        keys.set_propagation_phase(gtk::PropagationPhase::Capture);
         {
             let s = this.clone();
             keys.connect_key_pressed(move |_, key, _, state| {
+                if s.view_stack.visible_child_name().as_deref() != Some("preview") {
+                    return glib::Propagation::Proceed;
+                }
+                if let Some(focus) = gtk::prelude::GtkWindowExt::focus(&s.window) {
+                    if focus.is::<gtk::Text>() || focus.is::<gtk::TextView>() {
+                        return glib::Propagation::Proceed;
+                    }
+                }
                 let plain = !state.intersects(
                     gtk::gdk::ModifierType::CONTROL_MASK | gtk::gdk::ModifierType::ALT_MASK,
                 );
@@ -231,7 +242,7 @@ impl MainWindow {
                 glib::Propagation::Proceed
             });
         }
-        this.preview.scroll.add_controller(keys);
+        this.window.add_controller(keys);
 
         // Ctrl+Return finishes editing, mirroring `e` to start. Capture phase,
         // because GtkTextView would otherwise treat it as a plain Return and
@@ -328,7 +339,11 @@ impl MainWindow {
         if self.view_stack.visible_child_name().as_deref() == Some("edit") {
             self.view.grab_focus();
         } else {
-            self.preview.scroll.grab_focus();
+            // Deliberately focus nothing. The rendered view is built from
+            // selectable labels, and a GtkLabel selects all of its text the
+            // moment it takes focus — so grabbing focus here highlighted the
+            // first line every time the view came back.
+            gtk::prelude::GtkWindowExt::set_focus(&self.window, gtk::Widget::NONE);
         }
     }
 
