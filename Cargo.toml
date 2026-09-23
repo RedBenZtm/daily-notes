@@ -7,7 +7,7 @@ edition = "2024"
 adw = { version = "0.9", package = "libadwaita", features = ["v1_9", "gtk_v4_22"] }
 anyhow = "1.0.104"
 async-channel = "2"
-chrono = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
 gettext-rs = { version = "0.8.0", features = ["gettext-system"] }
 # gnome_50 matches this machine exactly (GTK 4.22 / GNOME 50) and pins the
 # companion gtk-rs crates to one coherent set.

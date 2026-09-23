@@ -30,43 +30,106 @@ msgstr "Último día laborable · {}"
 msgid "No earlier notes"
 msgstr "No hay notas anteriores"
 
-#: src/tray/mod.rs:139 src/tray/mod.rs:172
+#: src/gitlab/events.rs:127
+msgid "opened !{}"
+msgstr "!{} abierta"
+
+#: src/gitlab/events.rs:133
+msgid "merged !{}"
+msgstr "!{} fusionada"
+
+#: src/gitlab/events.rs:139
+msgid "closed !{}"
+msgstr "!{} cerrada"
+
+#: src/gitlab/events.rs:145
+msgid "opened #{}"
+msgstr "#{} abierta"
+
+#: src/gitlab/events.rs:151
+msgid "closed #{}"
+msgstr "#{} cerrada"
+
+#: src/gitlab/events.rs:162
+msgid "edited the wiki page {}"
+msgstr "Página wiki {} editada"
+
+#: src/gitlab/events.rs:177
+msgid "commented on {}"
+msgstr "Comentario en {}"
+
+#: src/gitlab/events.rs:211
+msgid "pushed the new branch {}"
+msgstr "Nueva rama {} subida"
+
+#: src/gitlab/events.rs:217
+msgid "deleted the branch {}"
+msgstr "Rama {} eliminada"
+
+#: src/gitlab/events.rs:223
+msgid "{} commit"
+msgid_plural "{} commits"
+msgstr[0] "{} commit"
+msgstr[1] "{} commits"
+
+#. Translators: {} is a count like "7 commits", {branch} a branch name.
+#: src/gitlab/events.rs:228
+msgid "pushed {} to {branch}"
+msgstr "{} subidos a {branch}"
+
+#: src/tray/mod.rs:139
 msgid "(no entries)"
 msgstr "(sin entradas)"
 
-#: src/tray/mod.rs:149
+#: src/tray/mod.rs:194
 msgid "Open in window"
 msgstr "Abrir en una ventana"
 
-#: src/tray/mod.rs:213 src/tray/mod.rs:232 src/ui/quicknote.rs:41
-#: src/ui/window.rs:54 src/ui/window.rs:176
+#: src/tray/mod.rs:225 src/tray/mod.rs:244 src/ui/quicknote.rs:41
+#: src/ui/window.rs:60 src/ui/window.rs:205
 msgid "Daily Notes"
 msgstr "Notas diarias"
 
 #. Translators: {} is the number of note entries written today.
-#: src/tray/mod.rs:234
+#: src/tray/mod.rs:246
 msgid "{} entry today"
 msgid_plural "{} entries today"
 msgstr[0] "{} entrada hoy"
 msgstr[1] "{} entradas hoy"
 
-#: src/tray/mod.rs:255 src/ui/quicknote.rs:106
+#: src/tray/mod.rs:267 src/ui/quicknote.rs:106
 msgid "Quick Note"
 msgstr "Nota rápida"
 
-#: src/tray/mod.rs:282 src/ui/quicknote.rs:55
+#: src/tray/mod.rs:294 src/ui/quicknote.rs:55
 msgid "Search…"
 msgstr "Buscar…"
 
-#: src/tray/mod.rs:288 src/ui/settings.rs:112
+#: src/tray/mod.rs:300 src/ui/settings.rs:112
 msgid "Settings"
 msgstr "Preferencias"
 
-#: src/tray/mod.rs:295
+#: src/tray/mod.rs:307
 msgid "Quit"
 msgstr "Salir"
 
-#: src/ui/completion.rs:91
+#: src/ui/activity.rs:48
+msgid "Activity"
+msgstr "Actividad"
+
+#: src/ui/activity.rs:92
+msgid "GitLab is not set up yet."
+msgstr "GitLab todavía no está configurado."
+
+#: src/ui/activity.rs:99
+msgid "Nothing happened in GitLab on this day."
+msgstr "No ocurrió nada en GitLab este día."
+
+#: src/ui/activity.rs:174
+msgid "Add to the note"
+msgstr "Añadir a la nota"
+
+#: src/ui/completion.rs:118
 msgid "Issues"
 msgstr "Incidencias"
 
@@ -91,7 +154,7 @@ msgstr "Último día laborable"
 msgid "Open"
 msgstr "Abrir"
 
-#: src/ui/quicknote.rs:281 src/ui/window.rs:61 src/ui/window.rs:450
+#: src/ui/quicknote.rs:281 src/ui/window.rs:67 src/ui/window.rs:525
 msgid "Today"
 msgstr "Hoy"
 
@@ -235,50 +298,54 @@ msgstr "Conectado, pero este token no puede ver {}"
 msgid "Connection failed"
 msgstr "Error de conexión"
 
-#: src/ui/window.rs:58
+#: src/ui/window.rs:64
 msgid "Previous day"
 msgstr "Día anterior"
 
-#: src/ui/window.rs:60
+#: src/ui/window.rs:66
 msgid "Next day"
 msgstr "Día siguiente"
 
-#: src/ui/window.rs:100
+#: src/ui/window.rs:106
 msgid "Recent days"
 msgstr "Días recientes"
 
-#: src/ui/window.rs:111
+#: src/ui/window.rs:117
 msgid "Search all notes…"
 msgstr "Buscar en todas las notas…"
 
 #. Translators: {} is a key combination, shown literally.
-#: src/ui/window.rs:138
+#: src/ui/window.rs:144
 msgid "Rendered view ({})"
 msgstr "Vista renderizada ({})"
 
 #. Translators: {} is a keyboard key, shown literally.
-#: src/ui/window.rs:146
+#: src/ui/window.rs:152
 msgid "Edit ({})"
 msgstr "Editar ({})"
 
-#: src/ui/window.rs:152
+#: src/ui/window.rs:158
 msgid "Search all notes"
 msgstr "Buscar en todas las notas"
 
-#: src/ui/window.rs:525
+#: src/ui/window.rs:182
+msgid "GitLab activity"
+msgstr "Actividad de GitLab"
+
+#: src/ui/window.rs:600
 msgid "Type to search your notes."
 msgstr "Escribe para buscar en tus notas."
 
-#: src/ui/window.rs:537
+#: src/ui/window.rs:612
 msgid "Search failed."
 msgstr "Error en la búsqueda."
 
-#: src/ui/window.rs:546
+#: src/ui/window.rs:621
 msgid "No notes match “{}”."
 msgstr "Ninguna nota coincide con «{}»."
 
 #. Translators: {} is the number of search results.
-#: src/ui/window.rs:553
+#: src/ui/window.rs:628
 msgid "{} result"
 msgid_plural "{} results"
 msgstr[0] "{} resultado"

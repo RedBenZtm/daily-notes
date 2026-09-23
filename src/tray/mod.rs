@@ -187,21 +187,19 @@ impl DailyNotesTray {
         };
 
         // A submenu's own label opens the submenu, so it cannot double as the
-        // "open this day" action the inline heading carries. This one keeps a
-        // row of its own.
-        let mut items = self.day_items(date, entries);
-        items.push(MenuItem::Separator);
-        items.push(
-            StandardItem {
-                label: gettext("Open in window"),
-                icon_name: "window-new-symbolic".into(),
-                activate: Box::new(move |t: &mut Self| {
-                    t.send(TrayCommand::OpenDay(date, None));
-                }),
-                ..Default::default()
-            }
-            .into(),
-        );
+        // "open this day" action the inline heading carries. Putting the action
+        // first inside instead keeps both days looking the same: the open
+        // affordance leads, with the entries under it.
+        let mut items: Vec<MenuItem<Self>> = vec![StandardItem {
+            label: gettext("Open in window"),
+            icon_name: "window-new-symbolic".into(),
+            activate: Box::new(move |t: &mut Self| {
+                t.send(TrayCommand::OpenDay(date, None));
+            }),
+            ..Default::default()
+        }
+        .into()];
+        items.extend(self.day_items(date, entries));
 
         SubMenu {
             label: label.into(),

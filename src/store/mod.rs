@@ -161,6 +161,82 @@ impl Store {
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
+    /// Replaces the cached activity for one day.
+    pub fn put_events(
+        &mut self,
+        date: NaiveDate,
+        events: &[crate::gitlab::events::EventRec],
+    ) -> Result<()> {
+        let key = date.format(days::DATE_FMT).to_string();
+        let tx = self.conn.transaction()?;
+        tx.execute("DELETE FROM gl_events WHERE local_date = ?1", rusqlite::params![key])?;
+        {
+            let mut stmt = tx.prepare(
+                "INSERT OR REPLACE INTO gl_events
+                 (id, local_date, created_at, project_id, action, target_type, target_iid, title, raw)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            )?;
+            for e in events {
+                stmt.execute(rusqlite::params![
+                    e.id as i64,
+                    key,
+                    e.created_at.to_rfc3339(),
+                    e.project_id as i64,
+                    e.action_name,
+                    e.target_type,
+                    e.target_iid.map(|i| i as i64),
+                    e.target_title,
+                    serde_json::to_string(e).unwrap_or_default(),
+                ])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// The cached activity for a day, oldest first.
+    ///
+    /// The original JSON is replayed rather than the flattened columns, so the
+    /// rendering can be improved without refetching anything.
+    pub fn events(&self, date: NaiveDate) -> Result<Vec<crate::gitlab::events::EventRec>> {
+        let key = date.format(days::DATE_FMT).to_string();
+        let mut stmt = self
+            .conn
+            .prepare("SELECT raw FROM gl_events WHERE local_date = ?1 ORDER BY created_at")?;
+        let rows = stmt.query_map(rusqlite::params![key], |r| r.get::<_, String>(0))?;
+        Ok(rows
+            .collect::<rusqlite::Result<Vec<_>>>()?
+            .into_iter()
+            .filter_map(|raw| serde_json::from_str(&raw).ok())
+            .collect())
+    }
+
+    pub fn put_project(&self, p: &crate::gitlab::client::ProjectBrief) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO gl_projects(id, path_with_namespace, name, web_url)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(id) DO UPDATE SET
+               path_with_namespace = excluded.path_with_namespace,
+               name = excluded.name, web_url = excluded.web_url",
+            rusqlite::params![p.id as i64, p.path_with_namespace, p.name, p.web_url],
+        )?;
+        Ok(())
+    }
+
+    /// (path_with_namespace, web_url) for a project id.
+    pub fn project(&self, id: u64) -> Option<(String, String)> {
+        use rusqlite::OptionalExtension;
+        self.conn
+            .query_row(
+                "SELECT path_with_namespace, web_url FROM gl_projects WHERE id = ?1",
+                rusqlite::params![id as i64],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()
+            .ok()
+            .flatten()
+    }
+
     pub fn ref_cache_get(&self, key: &str) -> Result<Option<crate::gitlab::cache::Entry>> {
         crate::gitlab::cache::get(&self.conn, key)
     }

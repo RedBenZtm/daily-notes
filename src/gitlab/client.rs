@@ -63,6 +63,15 @@ struct UserRec {
 
 /// Used by the main-project picker in Settings.
 #[allow(dead_code)]
+/// Just enough of a project to build URLs and label a row.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ProjectBrief {
+    pub id: u64,
+    pub path_with_namespace: String,
+    pub name: String,
+    pub web_url: String,
+}
+
 /// Just enough of an issue to offer it as a completion.
 #[derive(Debug, Clone, Deserialize)]
 pub struct IssueBrief {
@@ -116,6 +125,11 @@ impl Client {
             base: base.trim_end_matches('/').to_string(),
             token: token.to_string(),
         })
+    }
+
+    /// Same as `get`, exposed for the modules that build their own paths.
+    pub async fn get_json<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<Option<T>> {
+        self.get(path).await
     }
 
     async fn get<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<Option<T>> {
@@ -191,6 +205,11 @@ impl Client {
             }
             s => Probe::Failed(format!("{s}")),
         }
+    }
+
+    /// One project, for turning an event's numeric project_id into a path.
+    pub async fn project(&self, id: u64) -> Result<Option<ProjectBrief>> {
+        self.get::<ProjectBrief>(&format!("projects/{id}")).await
     }
 
     /// Open issues of a project, newest first, for `#` completion.

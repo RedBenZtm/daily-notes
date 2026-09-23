@@ -1,5 +1,6 @@
 pub mod cache;
 pub mod client;
+pub mod events;
 pub mod refs;
 
 /// Everything the background resolver needs for one batch.

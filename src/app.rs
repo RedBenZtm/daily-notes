@@ -119,6 +119,8 @@ struct Session {
     token: RefCell<Option<String>>,
     /// Asks for the issue list behind `#` completion to be refreshed.
     issues_tx: async_channel::Sender<ResolveBatch>,
+    /// Asks for a day's GitLab activity to be fetched.
+    events_tx: async_channel::Sender<(chrono::NaiveDate, ResolveBatch)>,
     /// When it was last refreshed, so typing does not hammer the API.
     issues_synced: Cell<Option<std::time::Instant>>,
 }
@@ -136,6 +138,10 @@ impl Session {
         {
             let s = self.clone();
             w.connect_sync_issues(move || s.sync_issues());
+        }
+        {
+            let s = self.clone();
+            w.connect_fetch_activity(move |date| s.fetch_activity(date));
         }
         *self.main_window.borrow_mut() = Some(w.clone());
         w
@@ -231,6 +237,27 @@ impl Session {
             main_project: cfg.gitlab.main_project.clone(),
             main_group: cfg.gitlab.main_group.clone(),
         });
+    }
+
+    /// Fetches one day's GitLab activity.
+    fn fetch_activity(&self, date: chrono::NaiveDate) {
+        let cfg = crate::config::load();
+        let Some(token) = self.token.borrow().clone() else {
+            return;
+        };
+        if !cfg.gitlab.is_configured() {
+            return;
+        }
+        let _ = self.events_tx.force_send((
+            date,
+            ResolveBatch {
+                refs: Vec::new(),
+                base: cfg.gitlab.base().to_string(),
+                token,
+                main_project: cfg.gitlab.main_project.clone(),
+                main_group: cfg.gitlab.main_group.clone(),
+            },
+        ));
     }
 
     /// Records which section a day belongs to, so the tray menu reopens there.
@@ -382,6 +409,13 @@ fn start_session(app: &adw::Application) -> Result<Rc<Session>> {
     let (issues_tx, issues_rx) = async_channel::unbounded::<ResolveBatch>();
     let (issues_done_tx, issues_done_rx) =
         async_channel::unbounded::<(String, Vec<crate::gitlab::client::IssueBrief>)>();
+    let (events_tx, events_rx) =
+        async_channel::unbounded::<(chrono::NaiveDate, ResolveBatch)>();
+    let (events_done_tx, events_done_rx) = async_channel::unbounded::<(
+        chrono::NaiveDate,
+        Vec<crate::gitlab::events::EventRec>,
+        Vec<crate::gitlab::client::ProjectBrief>,
+    )>();
 
     // A tray app is normally ended by the session manager or a `kill`, not by
     // closing a window — so the debounced save has to survive a signal too.
@@ -491,6 +525,48 @@ fn start_session(app: &adw::Application) -> Result<Rc<Session>> {
         }
     });
 
+    // The day's activity, plus whatever projects it mentions: events carry a
+    // numeric project_id and no path, so the paths are fetched alongside and
+    // cached — that table is effectively permanent.
+    {
+        let events_done_tx = events_done_tx.clone();
+        rt.spawn(async move {
+            let mut known: std::collections::HashSet<u64> = std::collections::HashSet::new();
+            while let Ok((date, req)) = events_rx.recv().await {
+                let client = match Client::new(&req.base, &req.token) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        tracing::warn!(?e, "could not build the GitLab client");
+                        continue;
+                    }
+                };
+                let events = match crate::gitlab::events::for_day(&client, date).await {
+                    Ok(e) => e,
+                    Err(e) => {
+                        tracing::warn!(?e, %date, "could not fetch the day's activity");
+                        continue;
+                    }
+                };
+                let mut projects = Vec::new();
+                let mut wanted: Vec<u64> = events.iter().map(|e| e.project_id).collect();
+                wanted.sort_unstable();
+                wanted.dedup();
+                for id in wanted {
+                    if !known.insert(id) {
+                        continue;
+                    }
+                    match client.project(id).await {
+                        Ok(Some(p)) => projects.push(p),
+                        Ok(None) => {}
+                        Err(e) => tracing::warn!(?e, id, "could not resolve a project"),
+                    }
+                }
+                tracing::debug!(%date, count = events.len(), "activity fetched");
+                let _ = events_done_tx.force_send((date, events, projects));
+            }
+        });
+    }
+
     let session = Rc::new(Session {
         store: Rc::new(RefCell::new(store)),
         link: TrayLink { rt, handle },
@@ -500,6 +576,7 @@ fn start_session(app: &adw::Application) -> Result<Rc<Session>> {
         resolve_tx,
         token: RefCell::new(None),
         issues_tx,
+        events_tx,
         issues_synced: Cell::new(None),
     });
     session.reload_token();
@@ -522,6 +599,28 @@ fn start_session(app: &adw::Application) -> Result<Rc<Session>> {
             while let Ok((project, issues)) = issues_done_rx.recv().await {
                 if let Err(e) = s.store.borrow_mut().put_issues(&project, &issues) {
                     tracing::warn!(?e, "could not store the issue list");
+                }
+            }
+        });
+    }
+
+    {
+        let s = session.clone();
+        glib::spawn_future_local(async move {
+            while let Ok((date, events, projects)) = events_done_rx.recv().await {
+                {
+                    let store = s.store.borrow();
+                    for p in &projects {
+                        if let Err(e) = store.put_project(p) {
+                            tracing::warn!(?e, "could not cache a project");
+                        }
+                    }
+                }
+                if let Err(e) = s.store.borrow_mut().put_events(date, &events) {
+                    tracing::warn!(?e, "could not cache the day's activity");
+                }
+                if let Some(w) = s.main_window.borrow().as_ref() {
+                    w.refresh_activity();
                 }
             }
         });

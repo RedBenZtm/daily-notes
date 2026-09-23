@@ -10,7 +10,10 @@ use gtk::glib;
 use crate::i18n::gettext;
 use crate::app::TrayLink;
 use crate::store::Store;
-use crate::ui::{dates, editor, preview::Preview};
+use crate::ui::{activity::Activity, dates, editor, preview::Preview};
+
+/// `meta` key holding whether the activity drawer was left open.
+const ACTIVITY_DRAWER: &str = "activity_drawer";
 
 /// How long the editor sits idle before the day is written back.
 const SAVE_DEBOUNCE_MS: u32 = 600;
@@ -41,6 +44,9 @@ pub struct MainWindow {
     view_stack: gtk::Stack,
     modes: adw::ToggleGroup,
     on_sync_issues: RefCell<Option<Box<dyn Fn()>>>,
+    activity: Rc<Activity>,
+    /// The activity drawer, on the trailing edge of the content.
+    drawer: adw::OverlaySplitView,
 }
 
 impl MainWindow {
@@ -158,10 +164,33 @@ impl MainWindow {
             .sync_create()
             .build();
 
+        // The activity drawer lives on the trailing edge, nested inside the
+        // day sidebar's split so both can be open at once.
+        let activity = Activity::new(store.clone());
+        let drawer = adw::OverlaySplitView::builder()
+            .sidebar_position(gtk::PackType::End)
+            .sidebar(&activity.widget)
+            .content(&view_stack)
+            .max_sidebar_width(420.0)
+            .min_sidebar_width(280.0)
+            .sidebar_width_fraction(0.35)
+            .show_sidebar(false)
+            .build();
+
+        let activity_toggle = gtk::ToggleButton::new();
+        activity_toggle.set_icon_name("view-sidebar-end-symbolic");
+        activity_toggle.set_tooltip_text(Some(&gettext("GitLab activity")));
+        header.pack_end(&activity_toggle);
+        activity_toggle
+            .bind_property("active", &drawer, "show-sidebar")
+            .bidirectional()
+            .sync_create()
+            .build();
+
         let content = adw::ToolbarView::new();
         content.add_top_bar(&header);
         content.add_top_bar(&search_bar);
-        content.set_content(Some(&view_stack));
+        content.set_content(Some(&drawer));
 
         let split = adw::OverlaySplitView::builder()
             .sidebar(&sidebar_page)
@@ -199,6 +228,8 @@ impl MainWindow {
             view_stack,
             modes,
             on_sync_issues: RefCell::new(None),
+            activity,
+            drawer,
         });
 
         let decorator = crate::ui::refs::RefDecorator::new(&view, &this.buffer, this.store.clone());
@@ -295,6 +326,31 @@ impl MainWindow {
             });
         }
         this.view.add_controller(leave);
+
+        // Restore the drawer to however it was left.
+        let open = this
+            .store
+            .borrow()
+            .meta_get(ACTIVITY_DRAWER)
+            .as_deref()
+            == Some("open");
+        activity_toggle.set_active(open);
+        {
+            let s = this.clone();
+            this.drawer.connect_show_sidebar_notify(move |d| {
+                let value = if d.shows_sidebar() { "open" } else { "closed" };
+                if let Err(e) = s.store.borrow().meta_set(ACTIVITY_DRAWER, value) {
+                    tracing::warn!(?e, "could not remember the activity drawer state");
+                }
+                if d.shows_sidebar() {
+                    s.activity.show_day(s.date.get());
+                }
+            });
+        }
+        {
+            let s = this.clone();
+            this.activity.connect_insert(move |line| s.append_to_day(&line));
+        }
 
         search_bar.set_key_capture_widget(Some(&this.window));
         this.connect_signals(&prev, &next, &today);
@@ -460,6 +516,9 @@ impl MainWindow {
         self.render_preview();
         self.preview.scroll_to_top();
         self.set_mode("preview");
+        if self.drawer.shows_sidebar() {
+            self.activity.show_day(date);
+        }
         self.title.set_title(&dates::short(date));
         let today = Local::now().date_naive();
         self.title.set_subtitle(&if date == today {
@@ -620,6 +679,38 @@ impl MainWindow {
             d.connect_resolve(move |needed| f(needed));
         }
         self.preview.connect_resolve_refs(move |needed| f(needed));
+    }
+
+    /// Appends a line to the day on screen — used by the activity drawer.
+    pub fn append_to_day(self: &Rc<Self>, line: &str) {
+        self.flush_save();
+        let date = self.date.get();
+        let body = self.store.borrow().body(date).unwrap_or_default();
+        let updated = crate::store::blocks::append_entry(&body, line);
+        if let Err(e) = self.store.borrow_mut().save(date, &updated) {
+            tracing::error!(?e, %date, "could not append to the day");
+            return;
+        }
+        self.load(date);
+        self.refresh_sidebar();
+        self.push_tray();
+    }
+
+    /// Repaints the drawer, e.g. after its events were fetched.
+    pub fn refresh_activity(self: &Rc<Self>) {
+        if self.drawer.shows_sidebar() {
+            self.activity.render(self.date.get());
+        }
+    }
+
+    pub fn connect_fetch_activity(self: &Rc<Self>, f: impl Fn(NaiveDate) + 'static) {
+        self.activity.connect_refresh(f);
+        // The drawer restores its state while the window is being built, which
+        // is before this callback exists — so that first request would go
+        // nowhere. Make it now that there is someone to answer it.
+        if self.drawer.shows_sidebar() {
+            self.activity.show_day(self.date.get());
+        }
     }
 
     /// Asks for the issue list to be refreshed, at most occasionally.
