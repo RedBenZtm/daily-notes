@@ -24,6 +24,36 @@ pub enum TrayCommand {
     Quit,
 }
 
+/// Which day the menu shows expanded.
+///
+/// A dbusmenu submenu cannot be told to open — the protocol carries only
+/// `visible`, `enabled`, `label`, `type`, `children-display`, `icon-name`,
+/// `icon-data`, `toggle-type` and `toggle-state`. So "expanded" is done by
+/// listing that day's entries inline at the top level and leaving the other
+/// day as a submenu.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Section {
+    #[default]
+    Today,
+    LastWorkday,
+}
+
+impl Section {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Section::Today => "today",
+            Section::LastWorkday => "last_workday",
+        }
+    }
+
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "last_workday" => Section::LastWorkday,
+            _ => Section::Today,
+        }
+    }
+}
+
 /// One entry as the tray shows it.
 #[derive(Debug, Clone)]
 pub struct Entry {
@@ -43,6 +73,8 @@ pub struct TraySnapshot {
     pub last_workday: Option<NaiveDate>,
     pub last_workday_label: String,
     pub last_workday_entries: Vec<Entry>,
+    /// Which section is listed inline; the other becomes a submenu.
+    pub expanded: Section,
 }
 
 pub struct DailyNotesTray {
@@ -83,16 +115,8 @@ impl DailyNotesTray {
         format!("{}…", kept.trim_end())
     }
 
-    fn day_submenu(&self, label: &str, date: Option<NaiveDate>, entries: &[Entry]) -> MenuItem<Self> {
-        let Some(date) = date else {
-            return SubMenu {
-                label: label.into(),
-                enabled: false,
-                ..Default::default()
-            }
-            .into();
-        };
-
+    /// The entries of one day, plus the action to open it whole.
+    fn day_items(&self, date: NaiveDate, entries: &[Entry]) -> Vec<MenuItem<Self>> {
         let mut items: Vec<MenuItem<Self>> = entries
             .iter()
             .take(12)
@@ -120,7 +144,6 @@ impl DailyNotesTray {
             );
         }
 
-        items.push(MenuItem::Separator);
         items.push(
             StandardItem {
                 label: gettext("Open in window"),
@@ -131,10 +154,44 @@ impl DailyNotesTray {
             }
             .into(),
         );
+        items
+    }
+
+    /// A day listed inline, under a heading that is not itself clickable.
+    fn day_inline(&self, label: &str, date: Option<NaiveDate>, entries: &[Entry]) -> Vec<MenuItem<Self>> {
+        let mut out: Vec<MenuItem<Self>> = vec![StandardItem {
+            label: label.into(),
+            enabled: false,
+            ..Default::default()
+        }
+        .into()];
+        match date {
+            Some(date) => out.extend(self.day_items(date, entries)),
+            None => out.push(
+                StandardItem {
+                    label: gettext("(no entries)"),
+                    enabled: false,
+                    ..Default::default()
+                }
+                .into(),
+            ),
+        }
+        out
+    }
+
+    fn day_submenu(&self, label: &str, date: Option<NaiveDate>, entries: &[Entry]) -> MenuItem<Self> {
+        let Some(date) = date else {
+            return SubMenu {
+                label: label.into(),
+                enabled: false,
+                ..Default::default()
+            }
+            .into();
+        };
 
         SubMenu {
             label: label.into(),
-            submenu: items,
+            submenu: self.day_items(date, entries),
             ..Default::default()
         }
         .into()
@@ -193,7 +250,7 @@ impl Tray for DailyNotesTray {
 
     fn menu(&self) -> Vec<MenuItem<Self>> {
         let s = &self.snapshot;
-        vec![
+        let mut items: Vec<MenuItem<Self>> = vec![
             StandardItem {
                 label: gettext("Quick Note"),
                 activate: Box::new(|t: &mut Self| t.send(TrayCommand::QuickNote)),
@@ -201,8 +258,25 @@ impl Tray for DailyNotesTray {
             }
             .into(),
             MenuItem::Separator,
-            self.day_submenu(&s.today_label, s.today, &s.today_entries),
-            self.day_submenu(&s.last_workday_label, s.last_workday, &s.last_workday_entries),
+        ];
+
+        // The chosen day is listed inline — the only way to show a day already
+        // "open", since a submenu cannot be told to expand.
+        let (inline, collapsed) = match s.expanded {
+            Section::Today => (
+                self.day_inline(&s.today_label, s.today, &s.today_entries),
+                self.day_submenu(&s.last_workday_label, s.last_workday, &s.last_workday_entries),
+            ),
+            Section::LastWorkday => (
+                self.day_inline(&s.last_workday_label, s.last_workday, &s.last_workday_entries),
+                self.day_submenu(&s.today_label, s.today, &s.today_entries),
+            ),
+        };
+        items.extend(inline);
+        items.push(MenuItem::Separator);
+        items.push(collapsed);
+
+        items.extend([
             MenuItem::Separator,
             StandardItem {
                 label: gettext("Search…"),
@@ -223,7 +297,8 @@ impl Tray for DailyNotesTray {
                 ..Default::default()
             }
             .into(),
-        ]
+        ]);
+        items
     }
 }
 

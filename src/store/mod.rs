@@ -82,6 +82,26 @@ impl Store {
         days::recent(&self.conn, limit)
     }
 
+    /// Small key/value settings that belong with the data rather than in the
+    /// config file — e.g. which tray section was last used.
+    pub fn meta_get(&self, key: &str) -> Option<String> {
+        use rusqlite::OptionalExtension;
+        self.conn
+            .query_row("SELECT v FROM meta WHERE k = ?1", rusqlite::params![key], |r| r.get(0))
+            .optional()
+            .ok()
+            .flatten()
+    }
+
+    pub fn meta_set(&self, key: &str, value: &str) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO meta(k, v) VALUES (?1, ?2)
+             ON CONFLICT(k) DO UPDATE SET v = excluded.v",
+            rusqlite::params![key, value],
+        )?;
+        Ok(())
+    }
+
     pub fn search(&self, query: &str, limit: usize) -> Result<Vec<search::Hit>> {
         search::keyword(&self.conn, query, limit)
     }
@@ -227,6 +247,16 @@ mod tests {
 
         s.ref_cache_clear().unwrap();
         assert!(s.ref_cache_get("issue:g/p:1").unwrap().is_none());
+    }
+
+    #[test]
+    fn meta_round_trips_and_overwrites() {
+        let s = Store::open_in_memory().unwrap();
+        assert_eq!(s.meta_get("tray_section"), None);
+        s.meta_set("tray_section", "last_workday").unwrap();
+        assert_eq!(s.meta_get("tray_section").as_deref(), Some("last_workday"));
+        s.meta_set("tray_section", "today").unwrap();
+        assert_eq!(s.meta_get("tray_section").as_deref(), Some("today"));
     }
 
     #[test]

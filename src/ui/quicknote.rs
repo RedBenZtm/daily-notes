@@ -397,8 +397,11 @@ impl QuickNote {
 
         let row = gtk::ListBoxRow::builder().child(&stack).activatable(true).build();
 
-        // Click the text to edit it. The gesture sits on the label rather than
-        // the whole row so it cannot fight the drag source for the gesture.
+        // Click to edit — but on the box *around* the label, not the label
+        // itself. GTK delivers to the target first, so a click on a link is
+        // claimed by the label's own link handling and never reaches here;
+        // anything else bubbles up and starts an edit. With the gesture on the
+        // label, it swallowed every click and links were dead.
         let click = gtk::GestureClick::new();
         {
             let stack = stack.clone();
@@ -409,7 +412,7 @@ impl QuickNote {
                 entry.select_region(-1, -1);
             });
         }
-        label.add_controller(click);
+        display.add_controller(click);
 
         {
             let s = self.clone();

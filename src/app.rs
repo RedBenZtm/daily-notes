@@ -17,10 +17,13 @@ use adw::prelude::*;
 
 use crate::gitlab::{client::Client, ResolveBatch, Resolution};
 use crate::store::Store;
-use crate::tray::{DailyNotesTray, Entry, TrayCommand, TraySnapshot};
+use crate::tray::{DailyNotesTray, Entry, Section, TrayCommand, TraySnapshot};
 use crate::ui::{dates, quicknote::QuickNote, window::MainWindow};
 
 pub const APP_ID: &str = "de.ztm.DailyNotes";
+
+/// `meta` key holding which tray section the user last worked with.
+const TRAY_SECTION: &str = "tray_section";
 
 /// Handle on the tray, usable from the GTK thread.
 #[derive(Clone)]
@@ -75,6 +78,13 @@ pub fn snapshot(store: &Store) -> TraySnapshot {
     };
 
     let last = store.last_workday(today).ok().flatten();
+    // Which section was last used, remembered across restarts. With no earlier
+    // notes there is nothing to expand but today.
+    let expanded = match store.meta_get(TRAY_SECTION).as_deref().map(Section::parse) {
+        Some(Section::LastWorkday) if last.is_some() => Section::LastWorkday,
+        _ => Section::Today,
+    };
+
     TraySnapshot {
         today: Some(today),
         // Translators: tray submenu, {} is a date like "Wed 23 Sep".
@@ -87,6 +97,7 @@ pub fn snapshot(store: &Store) -> TraySnapshot {
             None => crate::i18n::gettext("No earlier notes"),
         },
         last_workday_entries: last.map(entries_of).unwrap_or_default(),
+        expanded,
     }
 }
 
@@ -185,6 +196,28 @@ impl Session {
             });
         }
         settings.dialog.present(Some(parent));
+    }
+
+    /// Records which section a day belongs to, so the tray menu reopens there.
+    fn remember_section(&self, date: chrono::NaiveDate) {
+        let today = Local::now().date_naive();
+        let section = if date == today {
+            Section::Today
+        } else {
+            Section::LastWorkday
+        };
+        let store = self.store.borrow();
+        if store.meta_get(TRAY_SECTION).as_deref() == Some(section.as_str()) {
+            return;
+        }
+        if let Err(e) = store.meta_set(TRAY_SECTION, section.as_str()) {
+            tracing::warn!(?e, "could not remember the tray section");
+            return;
+        }
+        drop(store);
+        // Rebuild now, so the next time the menu opens it is already on the
+        // section just used rather than waiting for the next save.
+        self.link.push(snapshot(&self.store.borrow()));
     }
 
     /// Queues references for the background resolver.
@@ -463,6 +496,9 @@ fn start_session(app: &adw::Application) -> Result<Rc<Session>> {
                         s.quick_note(&app).present_for(Local::now().date_naive());
                     }
                     TrayCommand::OpenDay(date, line) => {
+                        // Touching a day makes its section the expanded one, so
+                        // the menu opens where you were last working.
+                        s.remember_section(date);
                         let w = s.main_window(&app);
                         w.go_to(date);
                         if let Some(line) = line {
