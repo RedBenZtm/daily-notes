@@ -1,6 +1,7 @@
 pub mod dates;
 pub mod editor;
 pub mod lines;
+pub mod markup;
 pub mod quicknote;
 pub mod refs;
 pub mod settings;

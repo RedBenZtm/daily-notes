@@ -65,7 +65,10 @@ pub fn snapshot(store: &Store) -> TraySnapshot {
             .unwrap_or_default()
             .into_iter()
             .map(|b| Entry {
-                text: b.text,
+                // The dbusmenu protocol carries plain strings — no markup, no
+                // links, no tooltips — so the best the tray can do is show the
+                // text a person wrote rather than its markdown source.
+                text: crate::ui::markup::to_plain(&b.text),
                 line: b.line_start,
             })
             .collect()
@@ -113,23 +116,7 @@ impl Session {
         let w = MainWindow::new(app, self.store.clone(), Some(self.link.clone()));
         {
             let s = self.clone();
-            w.connect_resolve_refs(move |needed| {
-                let cfg = crate::config::load();
-                let Some(token) = s.token.borrow().clone() else {
-                    return;
-                };
-                if !cfg.gitlab.is_configured() {
-                    return;
-                }
-                // Unbounded, so the editor never blocks on a slow instance.
-                let _ = s.resolve_tx.force_send(ResolveBatch {
-                    refs: needed,
-                    base: cfg.gitlab.base().to_string(),
-                    token,
-                    main_project: cfg.gitlab.main_project.clone(),
-                    main_group: cfg.gitlab.main_group.clone(),
-                });
-            });
+            w.connect_resolve_refs(move |needed| s.request_resolve(needed));
         }
         *self.main_window.borrow_mut() = Some(w.clone());
         w
@@ -159,6 +146,10 @@ impl Session {
                 w.go_to(date);
                 w.present();
             });
+        }
+        {
+            let s = self.clone();
+            q.connect_resolve_refs(move |needed| s.request_resolve(needed));
         }
         {
             let s = self.clone();
@@ -194,6 +185,31 @@ impl Session {
             });
         }
         settings.dialog.present(Some(parent));
+    }
+
+    /// Queues references for the background resolver.
+    ///
+    /// The token is read here, on the GTK thread, and travels with the batch —
+    /// the resolver must never touch the keyring itself.
+    fn request_resolve(&self, needed: Vec<crate::gitlab::refs::Reference>) {
+        if needed.is_empty() {
+            return;
+        }
+        let cfg = crate::config::load();
+        let Some(token) = self.token.borrow().clone() else {
+            return;
+        };
+        if !cfg.gitlab.is_configured() {
+            return;
+        }
+        // Unbounded, so the editor never blocks on a slow instance.
+        let _ = self.resolve_tx.force_send(ResolveBatch {
+            refs: needed,
+            base: cfg.gitlab.base().to_string(),
+            token,
+            main_project: cfg.gitlab.main_project.clone(),
+            main_group: cfg.gitlab.main_group.clone(),
+        });
     }
 
     /// Re-reads the token from the keyring. Called at startup and whenever
@@ -420,6 +436,10 @@ fn start_session(app: &adw::Application) -> Result<Rc<Session>> {
                 if let Some(w) = s.main_window.borrow().as_ref() {
                     w.refresh_refs();
                 }
+                if let Some(q) = s.quick_note.borrow().as_ref() {
+                    q.refresh();
+                }
+                s.link.push(snapshot(&s.store.borrow()));
             }
         });
     }

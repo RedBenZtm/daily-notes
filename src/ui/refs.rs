@@ -262,7 +262,7 @@ impl RefDecorator {
 }
 
 /// GitLab's states, in the user's language.
-fn translate_state(state: &str) -> String {
+pub fn translate_state(state: &str) -> String {
     match state {
         "opened" => gettext("open"),
         "closed" => gettext("closed"),
