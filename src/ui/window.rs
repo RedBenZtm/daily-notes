@@ -153,9 +153,16 @@ impl MainWindow {
                 .build(),
         );
         modes.add_css_class("flat");
+        let activity_toggle = gtk::ToggleButton::new();
+        activity_toggle.set_icon_name("gitlab-symbolic");
+        activity_toggle.set_tooltip_text(Some(&gettext("GitLab activity")));
+
         let search_toggle = gtk::ToggleButton::new();
         search_toggle.set_icon_name("system-search-symbolic");
         search_toggle.set_tooltip_text(Some(&gettext("Search all notes")));
+        // pack_end fills right to left, so the first one packed is the
+        // rightmost button.
+        header.pack_end(&activity_toggle);
         header.pack_end(&search_toggle);
         header.pack_end(&modes);
         search_toggle
@@ -177,10 +184,6 @@ impl MainWindow {
             .show_sidebar(false)
             .build();
 
-        let activity_toggle = gtk::ToggleButton::new();
-        activity_toggle.set_icon_name("view-sidebar-end-symbolic");
-        activity_toggle.set_tooltip_text(Some(&gettext("GitLab activity")));
-        header.pack_end(&activity_toggle);
         activity_toggle
             .bind_property("active", &drawer, "show-sidebar")
             .bidirectional()

@@ -11,6 +11,22 @@ pub mod settings;
 pub mod window;
 
 
+/// Makes the app's own icons resolvable.
+///
+/// Both the in-tree directory (so a build tree looks right without installing)
+/// and the XDG one the install step writes to.
+pub fn init_icons() {
+    use gtk::prelude::*;
+    let Some(display) = gtk::gdk::Display::default() else {
+        return;
+    };
+    let theme = gtk::IconTheme::for_display(&display);
+    theme.add_search_path(concat!(env!("CARGO_MANIFEST_DIR"), "/data/icons"));
+    if let Some(home) = std::env::var_os("HOME") {
+        theme.add_search_path(std::path::Path::new(&home).join(".local/share/icons"));
+    }
+}
+
 /// Loads the app stylesheet into the default display.
 pub fn load_css() {
     let provider = gtk::CssProvider::new();

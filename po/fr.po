@@ -30,50 +30,50 @@ msgstr "Dernier jour ouvré · {}"
 msgid "No earlier notes"
 msgstr "Aucune note antérieure"
 
-#: src/gitlab/events.rs:127
+#: src/gitlab/events.rs:134
 msgid "opened !{}"
 msgstr "!{} ouverte"
 
-#: src/gitlab/events.rs:133
+#: src/gitlab/events.rs:140
 msgid "merged !{}"
 msgstr "!{} fusionnée"
 
-#: src/gitlab/events.rs:139
+#: src/gitlab/events.rs:146
 msgid "closed !{}"
 msgstr "!{} fermée"
 
-#: src/gitlab/events.rs:145
+#: src/gitlab/events.rs:152
 msgid "opened #{}"
 msgstr "#{} ouverte"
 
-#: src/gitlab/events.rs:151
+#: src/gitlab/events.rs:158
 msgid "closed #{}"
 msgstr "#{} fermée"
 
-#: src/gitlab/events.rs:162
+#: src/gitlab/events.rs:169
 msgid "edited the wiki page {}"
 msgstr "Page wiki {} modifiée"
 
-#: src/gitlab/events.rs:177
+#: src/gitlab/events.rs:184
 msgid "commented on {}"
 msgstr "Commentaire sur {}"
 
-#: src/gitlab/events.rs:211
+#: src/gitlab/events.rs:236
 msgid "pushed the new branch {}"
 msgstr "Nouvelle branche {} poussée"
 
-#: src/gitlab/events.rs:217
+#: src/gitlab/events.rs:242
 msgid "deleted the branch {}"
 msgstr "Branche {} supprimée"
 
-#: src/gitlab/events.rs:223
+#: src/gitlab/events.rs:248
 msgid "{} commit"
 msgid_plural "{} commits"
 msgstr[0] "{} commit"
 msgstr[1] "{} commits"
 
 #. Translators: {} is a count like "7 commits", {branch} a branch name.
-#: src/gitlab/events.rs:228
+#: src/gitlab/events.rs:253
 msgid "pushed {} to {branch}"
 msgstr "{} poussés vers {branch}"
 
@@ -86,7 +86,7 @@ msgid "Open in window"
 msgstr "Ouvrir dans une fenêtre"
 
 #: src/tray/mod.rs:225 src/tray/mod.rs:244 src/ui/quicknote.rs:41
-#: src/ui/window.rs:60 src/ui/window.rs:205
+#: src/ui/window.rs:60 src/ui/window.rs:208
 msgid "Daily Notes"
 msgstr "Notes quotidiennes"
 
@@ -117,15 +117,15 @@ msgstr "Quitter"
 msgid "Activity"
 msgstr "Activité"
 
-#: src/ui/activity.rs:92
+#: src/ui/activity.rs:103
 msgid "GitLab is not set up yet."
 msgstr "GitLab n’est pas encore configuré."
 
-#: src/ui/activity.rs:99
+#: src/ui/activity.rs:110
 msgid "Nothing happened in GitLab on this day."
 msgstr "Rien ne s’est passé dans GitLab ce jour-là."
 
-#: src/ui/activity.rs:174
+#: src/ui/activity.rs:185
 msgid "Add to the note"
 msgstr "Ajouter à la note"
 
@@ -154,7 +154,7 @@ msgstr "Dernier jour ouvré"
 msgid "Open"
 msgstr "Ouvrir"
 
-#: src/ui/quicknote.rs:281 src/ui/window.rs:67 src/ui/window.rs:525
+#: src/ui/quicknote.rs:281 src/ui/window.rs:67 src/ui/window.rs:528
 msgid "Today"
 msgstr "Aujourd’hui"
 
@@ -325,27 +325,27 @@ msgid "Edit ({})"
 msgstr "Modifier ({})"
 
 #: src/ui/window.rs:158
-msgid "Search all notes"
-msgstr "Rechercher dans toutes les notes"
-
-#: src/ui/window.rs:182
 msgid "GitLab activity"
 msgstr "Activité GitLab"
 
-#: src/ui/window.rs:600
+#: src/ui/window.rs:162
+msgid "Search all notes"
+msgstr "Rechercher dans toutes les notes"
+
+#: src/ui/window.rs:603
 msgid "Type to search your notes."
 msgstr "Saisissez pour rechercher dans vos notes."
 
-#: src/ui/window.rs:612
+#: src/ui/window.rs:615
 msgid "Search failed."
 msgstr "Échec de la recherche."
 
-#: src/ui/window.rs:621
+#: src/ui/window.rs:624
 msgid "No notes match “{}”."
 msgstr "Aucune note ne correspond à « {} »."
 
 #. Translators: {} is the number of search results.
-#: src/ui/window.rs:628
+#: src/ui/window.rs:631
 msgid "{} result"
 msgid_plural "{} results"
 msgstr[0] "{} résultat"

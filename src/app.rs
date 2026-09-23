@@ -386,6 +386,7 @@ pub fn run() -> Result<glib::ExitCode> {
 }
 
 fn start_session(app: &adw::Application) -> Result<Rc<Session>> {
+    crate::ui::init_icons();
     crate::ui::load_css();
 
     let path = crate::store::default_path()?;

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A simplified, monochrome rendition of the GitLab tanuki, used to mark the
+     GitLab integration. Drawn as a symbolic icon so GTK recolours it to match
+     the theme and the button's state. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <g fill="#222222">
+    <!-- centre -->
+    <path d="M8 14.6 10.45 7.05 H5.55 Z"/>
+    <!-- inner wings -->
+    <path d="M8 14.6 5.55 7.05 H2.15 Z"/>
+    <path d="M8 14.6 10.45 7.05 H13.85 Z"/>
+    <!-- outer wings -->
+    <path d="M2.15 7.05 1.42 9.35 a.36.36 0 0 0 .13.4 L8 14.6 Z"/>
+    <path d="M13.85 7.05 14.58 9.35 a.36.36 0 0 1-.13.4 L8 14.6 Z"/>
+    <!-- ears -->
+    <path d="M2.15 7.05 3.16 3.92 a.19.19 0 0 1 .36 0 L5.55 7.05 Z"/>
+    <path d="M13.85 7.05 12.84 3.92 a.19.19 0 0 0-.36 0 L10.45 7.05 Z"/>
+  </g>
+</svg>
