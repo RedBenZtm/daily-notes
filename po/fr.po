@@ -39,7 +39,7 @@ msgid "Open in window"
 msgstr "Ouvrir dans une fenêtre"
 
 #: src/tray/mod.rs:213 src/tray/mod.rs:232 src/ui/quicknote.rs:41
-#: src/ui/window.rs:53 src/ui/window.rs:174
+#: src/ui/window.rs:53 src/ui/window.rs:175
 msgid "Daily Notes"
 msgstr "Notes quotidiennes"
 
@@ -87,7 +87,7 @@ msgstr "Dernier jour ouvré"
 msgid "Open"
 msgstr "Ouvrir"
 
-#: src/ui/quicknote.rs:281 src/ui/window.rs:60 src/ui/window.rs:398
+#: src/ui/quicknote.rs:281 src/ui/window.rs:60 src/ui/window.rs:421
 msgid "Today"
 msgstr "Aujourd’hui"
 
@@ -242,33 +242,34 @@ msgstr "Jours récents"
 msgid "Search all notes…"
 msgstr "Rechercher dans toutes les notes…"
 
-#: src/ui/window.rs:136
-msgid "Rendered view"
-msgstr "Vue rendue"
+#. Translators: {} is a key combination, shown literally.
+#: src/ui/window.rs:137
+msgid "Rendered view ({})"
+msgstr "Vue rendue ({})"
 
 #. Translators: {} is a keyboard key, shown literally.
-#: src/ui/window.rs:144
+#: src/ui/window.rs:145
 msgid "Edit ({})"
 msgstr "Modifier ({})"
 
-#: src/ui/window.rs:150
+#: src/ui/window.rs:151
 msgid "Search all notes"
 msgstr "Rechercher dans toutes les notes"
 
-#: src/ui/window.rs:473
+#: src/ui/window.rs:496
 msgid "Type to search your notes."
 msgstr "Saisissez pour rechercher dans vos notes."
 
-#: src/ui/window.rs:485
+#: src/ui/window.rs:508
 msgid "Search failed."
 msgstr "Échec de la recherche."
 
-#: src/ui/window.rs:494
+#: src/ui/window.rs:517
 msgid "No notes match “{}”."
 msgstr "Aucune note ne correspond à « {} »."
 
 #. Translators: {} is the number of search results.
-#: src/ui/window.rs:501
+#: src/ui/window.rs:524
 msgid "{} result"
 msgid_plural "{} results"
 msgstr[0] "{} résultat"

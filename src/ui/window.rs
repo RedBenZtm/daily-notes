@@ -133,7 +133,8 @@ impl MainWindow {
             adw::Toggle::builder()
                 .name("preview")
                 .icon_name("view-reveal-symbolic")
-                .tooltip(gettext("Rendered view"))
+                // Translators: {} is a key combination, shown literally.
+                .tooltip(gettext("Rendered view ({})").replace("{}", "Ctrl+Enter"))
                 .build(),
         );
         modes.add(
@@ -231,6 +232,28 @@ impl MainWindow {
             });
         }
         this.preview.scroll.add_controller(keys);
+
+        // Ctrl+Return finishes editing, mirroring `e` to start. Capture phase,
+        // because GtkTextView would otherwise treat it as a plain Return and
+        // insert a newline before we ever see it.
+        let leave = gtk::EventControllerKey::new();
+        leave.set_propagation_phase(gtk::PropagationPhase::Capture);
+        {
+            let s = this.clone();
+            leave.connect_key_pressed(move |_, key, _, state| {
+                let ctrl = state.contains(gtk::gdk::ModifierType::CONTROL_MASK);
+                let enter = matches!(
+                    key,
+                    gtk::gdk::Key::Return | gtk::gdk::Key::KP_Enter | gtk::gdk::Key::ISO_Enter
+                );
+                if ctrl && enter {
+                    s.set_mode("preview");
+                    return glib::Propagation::Stop;
+                }
+                glib::Propagation::Proceed
+            });
+        }
+        this.view.add_controller(leave);
 
         search_bar.set_key_capture_widget(Some(&this.window));
         this.connect_signals(&prev, &next, &today);
