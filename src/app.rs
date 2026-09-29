@@ -143,6 +143,14 @@ impl Session {
             let s = self.clone();
             w.connect_fetch_activity(move |date| s.fetch_activity(date));
         }
+        {
+            let s = self.clone();
+            w.connect_saved(move |date| {
+                if let Some(q) = s.quick_note.borrow().as_ref() {
+                    q.reload_if_showing(date);
+                }
+            });
+        }
         *self.main_window.borrow_mut() = Some(w.clone());
         w
     }
@@ -324,6 +332,9 @@ impl Session {
     fn flush(&self) {
         if let Some(w) = self.main_window.borrow().as_ref() {
             w.flush_save();
+        }
+        if let Some(q) = self.quick_note.borrow().as_ref() {
+            q.flush_save();
         }
     }
 }

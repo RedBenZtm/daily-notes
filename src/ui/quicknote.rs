@@ -16,6 +16,7 @@ use crate::i18n::gettext;
 use crate::gitlab::refs::Reference;
 use crate::store::{blocks, Block, Store};
 use crate::ui::markup;
+use crate::ui::day_pane::DayPane;
 use crate::ui::entry_completion;
 use crate::ui::refs::{open_link, RefResolver};
 use crate::ui::dates;
@@ -27,7 +28,11 @@ pub struct QuickNote {
     list: gtk::ListBox,
     add: gtk::Entry,
     title: adw::WindowTitle,
-    last_workday_box: gtk::Box,
+    /// The previous workday in a drawer beside the entries, shown and edited
+    /// the same way as in the main window.
+    drawer: gtk::Box,
+    drawer_title: gtk::Label,
+    last_workday: Rc<DayPane>,
     /// Called after any write, so the tray and the main window can catch up.
     on_changed: RefCell<Option<Box<dyn Fn(NaiveDate)>>>,
     on_open_window: RefCell<Option<Box<dyn Fn(NaiveDate)>>>,
@@ -70,10 +75,6 @@ impl QuickNote {
         actions.append(&search);
         actions.append(&open);
 
-        let last_workday_box = gtk::Box::new(gtk::Orientation::Vertical, 4);
-        last_workday_box.set_visible(false);
-        last_workday_box.add_css_class("card");
-
         let body = gtk::Box::new(gtk::Orientation::Vertical, 12);
         body.set_margin_top(12);
         body.set_margin_bottom(12);
@@ -81,7 +82,6 @@ impl QuickNote {
         body.set_margin_end(12);
         body.append(&list);
         body.append(&add);
-        body.append(&last_workday_box);
 
         let scroll = gtk::ScrolledWindow::builder()
             .hscrollbar_policy(gtk::PolicyType::Never)
@@ -101,10 +101,37 @@ impl QuickNote {
         actions.set_margin_end(12);
         action_bar.append(&actions);
         outer.append(&action_bar);
+        outer.set_hexpand(true);
+
+        let drawer_title = gtk::Label::new(None);
+        drawer_title.set_xalign(0.0);
+        drawer_title.add_css_class("heading");
+        drawer_title.set_margin_top(12);
+        drawer_title.set_margin_start(12);
+        drawer_title.set_margin_end(12);
+
+        let last_workday = DayPane::new(store.clone());
+        last_workday.set_compact();
+        last_workday.widget.set_vexpand(true);
+
+        let drawer = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        drawer.set_width_request(DRAWER_WIDTH);
+        drawer.add_css_class("view");
+        drawer.append(&drawer_title);
+        drawer.append(&last_workday.widget);
+
+        let drawer_side = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+        drawer_side.set_visible(false);
+        drawer_side.append(&gtk::Separator::new(gtk::Orientation::Vertical));
+        drawer_side.append(&drawer);
+
+        let content = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+        content.append(&outer);
+        content.append(&drawer_side);
 
         let view = adw::ToolbarView::new();
         view.add_top_bar(&header);
-        view.set_content(Some(&outer));
+        view.set_content(Some(&content));
 
         let window = adw::Window::builder()
             .application(app)
@@ -122,7 +149,9 @@ impl QuickNote {
             list,
             add,
             title,
-            last_workday_box,
+            drawer: drawer_side,
+            drawer_title,
+            last_workday,
             on_changed: RefCell::new(None),
             on_open_window: RefCell::new(None),
             on_search: RefCell::new(None),
@@ -147,6 +176,25 @@ impl QuickNote {
                 e.set_text("");
                 // stay focused so several entries can be typed in a row
                 e.grab_focus();
+            });
+        }
+        {
+            let s = this.clone();
+            this.last_workday
+                .connect_resolve_refs(move |needed| s.request_resolve(needed));
+        }
+        {
+            let s = this.clone();
+            this.last_workday.connect_sync_issues(move || s.sync_issues());
+        }
+        {
+            // An edit in the drawer is a write like any other: the tray and
+            // the main window have to hear about it.
+            let s = this.clone();
+            this.last_workday.connect_saved(move |date| {
+                if let Some(cb) = s.on_changed.borrow().as_ref() {
+                    cb(date);
+                }
             });
         }
         {
@@ -230,18 +278,27 @@ impl QuickNote {
     fn render(self: &Rc<Self>, text: &str) -> String {
         let resolver = RefResolver::new(self.store.clone());
         let markup = markup::to_pango(text, &|r| resolver.lookup(r));
-        let pending = resolver.take_pending();
-        if !pending.is_empty() {
-            if let Some(cb) = self.on_resolve.borrow().as_ref() {
-                cb(pending);
-            }
-        }
+        self.request_resolve(resolver.take_pending());
         markup
+    }
+
+    fn request_resolve(&self, pending: Vec<Reference>) {
+        if pending.is_empty() {
+            return;
+        }
+        if let Some(cb) = self.on_resolve.borrow().as_ref() {
+            cb(pending);
+        }
     }
 
     pub fn present_for(self: &Rc<Self>, date: NaiveDate) {
         self.date.set(date);
         self.reload();
+        // Not on every reload: that runs after each entry added here, and
+        // would throw the drawer out of editing mid-sentence.
+        if self.drawer.is_visible() {
+            self.render_last_workday();
+        }
         self.window.present();
 
         // Deferred: the rows were just rebuilt, so nothing has been laid out
@@ -324,7 +381,26 @@ impl QuickNote {
     pub fn refresh(self: &Rc<Self>) {
         if self.window.is_visible() {
             self.reload();
+            if self.drawer.is_visible() {
+                self.last_workday.refresh_refs();
+            }
         }
+    }
+
+    /// Picks up a write the main window made, so neither view overwrites the
+    /// other with a stale copy of the same day.
+    pub fn reload_if_showing(self: &Rc<Self>, date: NaiveDate) {
+        if date == self.date.get() {
+            self.reload();
+        }
+        if self.drawer.is_visible() && date == self.last_workday.date() {
+            self.last_workday.load(date);
+        }
+    }
+
+    /// Writes out anything still being typed in the drawer.
+    pub fn flush_save(self: &Rc<Self>) {
+        self.last_workday.flush_save();
     }
 
     fn reload(self: &Rc<Self>) {
@@ -511,48 +587,58 @@ impl QuickNote {
         row
     }
 
+    /// Opens or closes the drawer, growing the window by its width rather
+    /// than squeezing today's entries — unless the window is maximized or
+    /// tiled, where its size is not ours to change.
     fn toggle_last_workday(self: &Rc<Self>, show: bool) {
-        self.last_workday_box.set_visible(show);
-        while let Some(c) = self.last_workday_box.first_child() {
-            self.last_workday_box.remove(&c);
-        }
-        if !show {
+        if show == self.drawer.is_visible() {
             return;
         }
+        if show {
+            self.render_last_workday();
+        } else {
+            self.last_workday.flush_save();
+        }
+        self.drawer.set_visible(show);
 
+        let w = &self.window;
+        let tiled = w
+            .surface()
+            .and_downcast::<gdk::Toplevel>()
+            .is_some_and(|t| t.state().contains(gdk::ToplevelState::TILED));
+        if w.is_maximized() || w.is_fullscreen() || tiled {
+            return;
+        }
+        let (width, height) = (w.width(), w.height());
+        if width <= 0 {
+            return;
+        }
+        let delta = DRAWER_WIDTH + 1; // + the separator
+        let width = if show { width + delta } else { (width - delta).max(1) };
+        w.set_default_size(width, height);
+    }
+
+    fn render_last_workday(self: &Rc<Self>) {
         let store = self.store.borrow();
-        let Some(prev) = store.last_workday(self.date.get()).ok().flatten() else {
-            let l = gtk::Label::new(Some(&gettext("No earlier notes")));
-            l.set_margin_top(12);
-            l.set_margin_bottom(12);
-            l.add_css_class("dim-label");
-            self.last_workday_box.append(&l);
-            return;
-        };
-
-        let heading = gtk::Label::new(None);
-        heading.set_xalign(0.0);
-        heading.set_markup(&format!(
-            "<b>{}</b>",
-            glib::markup_escape_text(&dates::short(prev))
-        ));
-        heading.set_margin_top(10);
-        heading.set_margin_start(12);
-        heading.set_margin_end(12);
-        self.last_workday_box.append(&heading);
-
-        for b in store.summary(prev).unwrap_or_default() {
-            let l = gtk::Label::new(Some(&format!("• {}", b.text)));
-            l.set_xalign(0.0);
-            l.set_wrap(true);
-            l.set_wrap_mode(gtk::pango::WrapMode::WordChar);
-            l.set_margin_start(12);
-            l.set_margin_end(12);
-            l.add_css_class("dim-label");
-            self.last_workday_box.append(&l);
+        match store.last_workday(self.date.get()).ok().flatten() {
+            Some(prev) => {
+                drop(store);
+                self.drawer_title.set_text(&dates::long(prev));
+                self.drawer_title.remove_css_class("dim-label");
+                self.last_workday.load(prev);
+                self.last_workday.widget.set_visible(true);
+            }
+            None => {
+                drop(store);
+                // Not the preview's own empty page: that one invites writing,
+                // and there is nothing to write here.
+                self.drawer_title.set_text(&gettext("No earlier notes"));
+                self.drawer_title.add_css_class("dim-label");
+                self.last_workday.widget.set_visible(false);
+            }
         }
-        let pad = gtk::Box::new(gtk::Orientation::Vertical, 0);
-        pad.set_height_request(8);
-        self.last_workday_box.append(&pad);
     }
 }
+
+/// How much the drawer adds to the window.
+const DRAWER_WIDTH: i32 = 360;

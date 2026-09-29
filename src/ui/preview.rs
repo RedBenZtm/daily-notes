@@ -16,6 +16,18 @@ use crate::store::{Block, Kind, Store};
 use crate::ui::markup;
 use crate::ui::refs::{open_link, RefResolver};
 
+/// Where in the source a double-click on the rendered view landed.
+pub struct SourceHit {
+    /// The block's lines, 0-based and inclusive.
+    pub line_start: usize,
+    pub line_end: usize,
+    /// The label's text as shown, and the character clicked in it.
+    pub rendered: String,
+    pub rendered_char: usize,
+    /// How far down the visible area the click was, 0 at the top.
+    pub y_fraction: f64,
+}
+
 pub struct Preview {
     pub scroll: gtk::ScrolledWindow,
     content: gtk::Box,
@@ -23,7 +35,10 @@ pub struct Preview {
     on_resolve: RefCell<Option<Box<dyn Fn(Vec<crate::gitlab::refs::Reference>)>>>,
     /// Clicking an empty day should drop straight into the editor, which is
     /// otherwise a dead end for a day with nothing in it.
-    on_edit: RefCell<Option<Box<dyn Fn()>>>,
+    on_edit: RefCell<Option<Box<dyn Fn(Option<SourceHit>)>>>,
+    /// Each rendered label with the source lines it came from, so a
+    /// double-click can be traced back to a place in the text.
+    targets: RefCell<Vec<(gtk::Label, usize, usize)>>,
 }
 
 impl Preview {
@@ -46,12 +61,79 @@ impl Preview {
             .child(&clamp)
             .build();
 
-        Rc::new(Self {
+        let this = Rc::new(Self {
             scroll,
             content,
             store,
             on_resolve: RefCell::new(None),
             on_edit: RefCell::new(None),
+            targets: RefCell::new(Vec::new()),
+        });
+
+        // Double-click edits, right where it landed. Capture phase, so it is
+        // seen before a label turns the second click into a word selection;
+        // single clicks are left alone and still select text or open links.
+        let click = gtk::GestureClick::new();
+        click.set_button(gtk::gdk::BUTTON_PRIMARY);
+        click.set_propagation_phase(gtk::PropagationPhase::Capture);
+        {
+            let s = Rc::downgrade(&this);
+            click.connect_pressed(move |gesture, n_press, x, y| {
+                let Some(s) = s.upgrade() else { return };
+                if n_press != 2 || s.on_edit.borrow().is_none() {
+                    return;
+                }
+                gesture.set_state(gtk::EventSequenceState::Claimed);
+                let hit = s.hit_at(x, y);
+                if let Some(cb) = s.on_edit.borrow().as_ref() {
+                    cb(hit);
+                }
+            });
+        }
+        this.scroll.add_controller(click);
+
+        this
+    }
+
+    /// The label under (or nearest to) a point in the scrolled window.
+    fn hit_at(&self, x: f64, y: f64) -> Option<SourceHit> {
+        let point = gtk::graphene::Point::new(x as f32, y as f32);
+        let targets = self.targets.borrow();
+        let (label, line_start, line_end, local) = targets
+            .iter()
+            .filter_map(|(label, a, b)| {
+                let p = self.scroll.compute_point(label, &point)?;
+                let h = label.height() as f32;
+                let dy = if p.y() < 0.0 {
+                    -p.y()
+                } else if p.y() > h {
+                    p.y() - h
+                } else {
+                    0.0
+                };
+                Some((label, *a, *b, p, dy))
+            })
+            .min_by(|a, b| a.4.total_cmp(&b.4))
+            .map(|(l, a, b, p, _)| (l, a, b, p))?;
+
+        let layout = label.layout();
+        let (ox, oy) = label.layout_offsets();
+        let scale = gtk::pango::SCALE as f32;
+        let (_, index, trailing) = layout.xy_to_index(
+            ((local.x() - ox as f32) * scale) as i32,
+            ((local.y() - oy as f32) * scale) as i32,
+        );
+        let text = layout.text().to_string();
+        let byte = (index.max(0) as usize).min(text.len());
+        let rendered_char = text[..byte].chars().count() + trailing.max(0) as usize;
+
+        let page = self.scroll.height().max(1) as f64;
+        Some(SourceHit {
+            line_start,
+            line_end,
+            rendered: text,
+            rendered_char,
+            y_fraction: y / page,
         })
     }
 
@@ -62,7 +144,18 @@ impl Preview {
         *self.on_resolve.borrow_mut() = Some(Box::new(f));
     }
 
-    pub fn connect_edit_requested(self: &Rc<Self>, f: impl Fn() + 'static) {
+    /// Tighter padding for a narrow host, e.g. the Quick Note drawer; the
+    /// default leaves room below for the main window's floating controls.
+    pub fn set_compact(&self) {
+        self.content.set_margin_top(12);
+        self.content.set_margin_bottom(12);
+        self.content.set_margin_start(12);
+        self.content.set_margin_end(12);
+    }
+
+    /// Asked to edit: by a click on an empty day (no position), or by a
+    /// double-click on the text (the position it landed on).
+    pub fn connect_edit_requested(self: &Rc<Self>, f: impl Fn(Option<SourceHit>) + 'static) {
         *self.on_edit.borrow_mut() = Some(Box::new(f));
     }
 
@@ -88,6 +181,8 @@ impl Preview {
         while let Some(child) = self.content.first_child() {
             self.content.remove(&child);
         }
+        let mut targets = self.targets.borrow_mut();
+        targets.clear();
 
         if blocks.is_empty() {
             let status = adw::StatusPage::builder()
@@ -101,7 +196,7 @@ impl Preview {
             let click = gtk::GestureClick::new();
             click.connect_released(move |_, _, _, _| {
                 if let Some(cb) = s.on_edit.borrow().as_ref() {
-                    cb();
+                    cb(None);
                 }
             });
             status.add_controller(click);
@@ -120,6 +215,7 @@ impl Preview {
                     // day's notes, not a document outline.
                     l.add_css_class("title-4");
                     l.set_margin_top(12);
+                    targets.push((l.clone(), block.line_start, block.line_end));
                     self.content.append(&l);
                 }
                 Kind::Bullet => {
@@ -131,11 +227,13 @@ impl Preview {
                     row.append(&dot);
                     let l = self.label(&markup::to_pango(&block.text, &|r| resolver.lookup(r)));
                     l.set_hexpand(true);
+                    targets.push((l.clone(), block.line_start, block.line_end));
                     row.append(&l);
                     self.content.append(&row);
                 }
                 Kind::Para => {
                     let l = self.label(&markup::to_pango(&block.text, &|r| resolver.lookup(r)));
+                    targets.push((l.clone(), block.line_start, block.line_end));
                     self.content.append(&l);
                 }
                 Kind::Code => {
@@ -153,6 +251,7 @@ impl Preview {
                     l.set_wrap_mode(gtk::pango::WrapMode::Char);
                     l.set_selectable(true);
                     l.add_css_class("monospace");
+                    targets.push((l.clone(), block.line_start, block.line_end));
                     l.set_margin_top(8);
                     l.set_margin_bottom(8);
                     l.set_margin_start(12);
@@ -165,6 +264,7 @@ impl Preview {
             }
         }
 
+        drop(targets);
         let pending = resolver.take_pending();
         if !pending.is_empty() {
             if let Some(cb) = self.on_resolve.borrow().as_ref() {

@@ -10,26 +10,18 @@ use gtk::glib;
 use crate::i18n::gettext;
 use crate::app::TrayLink;
 use crate::store::Store;
-use crate::ui::{activity::Activity, dates, editor, preview::Preview};
+use crate::ui::day_pane::DayPane;
+use crate::ui::{activity::Activity, dates};
 
 /// `meta` key holding whether the activity drawer was left open.
 const ACTIVITY_DRAWER: &str = "activity_drawer";
 
-/// How long the editor sits idle before the day is written back.
-const SAVE_DEBOUNCE_MS: u32 = 600;
-
 pub struct MainWindow {
     pub window: adw::ApplicationWindow,
     store: Rc<RefCell<Store>>,
-    buffer: sourceview5::Buffer,
     date: Rc<Cell<NaiveDate>>,
-    /// Set while the buffer is being repopulated, so the resulting `changed`
-    /// signal is not mistaken for the user typing.
-    loading: Rc<Cell<bool>>,
-    pending_save: Rc<RefCell<Option<glib::SourceId>>>,
     title: adw::WindowTitle,
     sidebar: gtk::ListBox,
-    view: sourceview5::View,
     tray: Option<TrayLink>,
     search_bar: gtk::SearchBar,
     search_entry: gtk::SearchEntry,
@@ -38,12 +30,10 @@ pub struct MainWindow {
     results_status: gtk::Label,
     /// Debounces the query so each keystroke does not hit SQLite.
     pending_search: Rc<RefCell<Option<glib::SourceId>>>,
-    refs: RefCell<Option<Rc<crate::ui::refs::RefDecorator>>>,
-    preview: Rc<Preview>,
-    /// "preview" or "edit".
-    view_stack: gtk::Stack,
-    modes: adw::ToggleGroup,
-    on_sync_issues: RefCell<Option<Box<dyn Fn()>>>,
+    /// The day itself, rendered or in source.
+    pane: Rc<DayPane>,
+    /// Called after each write, so the Quick Note can catch up.
+    on_saved: RefCell<Option<Box<dyn Fn(NaiveDate)>>>,
     activity: Rc<Activity>,
     /// The activity drawer, on the trailing edge of the content.
     drawer: adw::OverlaySplitView,
@@ -55,8 +45,6 @@ impl MainWindow {
         store: Rc<RefCell<Store>>,
         tray: Option<TrayLink>,
     ) -> Rc<Self> {
-        let (view, buffer) = editor::build();
-
         let title = adw::WindowTitle::new(&gettext("Daily Notes"), "");
         let header = adw::HeaderBar::builder().title_widget(&title).build();
 
@@ -120,39 +108,8 @@ impl MainWindow {
         // anywhere in the window opens the search bar.
         let search_bar = gtk::SearchBar::builder().child(&search_entry).build();
 
-        let editor_scroll = gtk::ScrolledWindow::builder()
-            .hscrollbar_policy(gtk::PolicyType::Never)
-            .vexpand(true)
-            .child(&view)
-            .build();
+        let pane = DayPane::new(store.clone());
 
-        let preview = Preview::new(store.clone());
-        let view_stack = gtk::Stack::new();
-        view_stack.set_transition_type(gtk::StackTransitionType::Crossfade);
-        view_stack.set_transition_duration(80);
-        view_stack.add_named(&preview.scroll, Some("preview"));
-        view_stack.add_named(&editor_scroll, Some("edit"));
-        view_stack.set_visible_child_name("preview");
-
-        // A segmented control, the way an editor offers preview vs source.
-        let modes = adw::ToggleGroup::new();
-        modes.add(
-            adw::Toggle::builder()
-                .name("preview")
-                .icon_name("view-reveal-symbolic")
-                // Translators: {} is a key combination, shown literally.
-                .tooltip(gettext("Rendered view ({})").replace("{}", "Ctrl+Enter"))
-                .build(),
-        );
-        modes.add(
-            adw::Toggle::builder()
-                .name("edit")
-                .icon_name("document-edit-symbolic")
-                // Translators: {} is a keyboard key, shown literally.
-                .tooltip(gettext("Edit ({})").replace("{}", "E"))
-                .build(),
-        );
-        modes.add_css_class("flat");
         let activity_toggle = gtk::ToggleButton::new();
         activity_toggle.set_icon_name("gitlab-symbolic");
         activity_toggle.set_tooltip_text(Some(&gettext("GitLab activity")));
@@ -164,7 +121,6 @@ impl MainWindow {
         // rightmost button.
         header.pack_end(&activity_toggle);
         header.pack_end(&search_toggle);
-        header.pack_end(&modes);
         search_toggle
             .bind_property("active", &search_bar, "search-mode-enabled")
             .bidirectional()
@@ -177,7 +133,7 @@ impl MainWindow {
         let drawer = adw::OverlaySplitView::builder()
             .sidebar_position(gtk::PackType::End)
             .sidebar(&activity.widget)
-            .content(&view_stack)
+            .content(&pane.widget)
             .max_sidebar_width(420.0)
             .min_sidebar_width(280.0)
             .sidebar_width_fraction(0.35)
@@ -212,13 +168,9 @@ impl MainWindow {
         let this = Rc::new(Self {
             window,
             store,
-            buffer,
             date: Rc::new(Cell::new(Local::now().date_naive())),
-            loading: Rc::new(Cell::new(false)),
-            pending_save: Rc::new(RefCell::new(None)),
             title,
             sidebar,
-            view: view.clone(),
             tray,
             search_bar: search_bar.clone(),
             search_entry: search_entry.clone(),
@@ -226,109 +178,23 @@ impl MainWindow {
             results,
             results_status,
             pending_search: Rc::new(RefCell::new(None)),
-            refs: RefCell::new(None),
-            preview,
-            view_stack,
-            modes,
-            on_sync_issues: RefCell::new(None),
+            pane,
+            on_saved: RefCell::new(None),
             activity,
             drawer,
         });
 
-        let decorator = crate::ui::refs::RefDecorator::new(&view, &this.buffer, this.store.clone());
-        *this.refs.borrow_mut() = Some(decorator);
-
-        // `#` offers the project's open issues, the way GitLab's comment box
-        // does. Served from the local cache so typing never waits on the API.
-        {
-            use sourceview5::prelude::*;
-            let provider = crate::ui::completion::IssueCompletion::new(this.store.clone());
-            {
-                let s = this.clone();
-                provider.connect_query(move || s.request_issue_sync());
-            }
-            this.view.completion().add_provider(&provider);
-
-            // Deleting back to a bare `#` empties the word being completed, at
-            // which point GtkSourceView ends the session — and deletion never
-            // re-triggers it, only typing `#` does. So when an edit leaves the
-            // caret right after a `#`, offer the list again.
-            let completion = this.view.completion();
-            this.buffer.connect_changed(move |buf| {
-                let mut probe = buf.iter_at_mark(&buf.get_insert());
-                if !(probe.backward_char() && probe.char() == '#') {
-                    return;
-                }
-                let completion = completion.clone();
-                // Deferred: showing while `changed` is still being emitted
-                // re-enters GtkSourceView's handling of the very same edit.
-                glib::idle_add_local_once(move || completion.show());
-            });
-        }
-
         {
             let s = this.clone();
-            this.modes.connect_active_notify(move |g| {
-                let name = if g.active() == 0 { "preview" } else { "edit" };
-                s.set_mode(name);
+            this.pane.connect_saved(move |date| {
+                s.refresh_sidebar();
+                s.push_tray();
+                if let Some(cb) = s.on_saved.borrow().as_ref() {
+                    cb(date);
+                }
             });
         }
-        {
-            let s = this.clone();
-            this.preview.connect_edit_requested(move || s.set_mode("edit"));
-        }
-
-        // `e` opens the editor. It sits on the window rather than on the
-        // rendered view, because the rendered view deliberately holds no focus
-        // (see focus_current_mode). The guards below are what keep a bare
-        // letter key safe: it only acts in the rendered view, and never while
-        // the caret is in something typable such as the search entry.
-        let keys = gtk::EventControllerKey::new();
-        keys.set_propagation_phase(gtk::PropagationPhase::Capture);
-        {
-            let s = this.clone();
-            keys.connect_key_pressed(move |_, key, _, state| {
-                if s.view_stack.visible_child_name().as_deref() != Some("preview") {
-                    return glib::Propagation::Proceed;
-                }
-                if let Some(focus) = gtk::prelude::GtkWindowExt::focus(&s.window) {
-                    if focus.is::<gtk::Text>() || focus.is::<gtk::TextView>() {
-                        return glib::Propagation::Proceed;
-                    }
-                }
-                let plain = !state.intersects(
-                    gtk::gdk::ModifierType::CONTROL_MASK | gtk::gdk::ModifierType::ALT_MASK,
-                );
-                if plain && matches!(key, gtk::gdk::Key::e | gtk::gdk::Key::E) {
-                    s.set_mode("edit");
-                    return glib::Propagation::Stop;
-                }
-                glib::Propagation::Proceed
-            });
-        }
-        this.window.add_controller(keys);
-
-        // Ctrl+Return finishes editing, mirroring `e` to start. Capture phase,
-        // because GtkTextView would otherwise treat it as a plain Return and
-        // insert a newline before we ever see it.
-        let leave = gtk::EventControllerKey::new();
-        leave.set_propagation_phase(gtk::PropagationPhase::Capture);
-        {
-            let s = this.clone();
-            leave.connect_key_pressed(move |_, key, _, state| {
-                let ctrl = state.contains(gtk::gdk::ModifierType::CONTROL_MASK);
-                let enter = matches!(
-                    key,
-                    gtk::gdk::Key::Return | gtk::gdk::Key::KP_Enter | gtk::gdk::Key::ISO_Enter
-                );
-                if ctrl && enter {
-                    s.set_mode("preview");
-                    return glib::Propagation::Stop;
-                }
-                glib::Propagation::Proceed
-            });
-        }
-        this.view.add_controller(leave);
+        this.pane.add_edit_shortcut(&this.window);
 
         // Restore the drawer to however it was left.
         let open = this
@@ -359,7 +225,6 @@ impl MainWindow {
         this.connect_signals(&prev, &next, &today);
         this.load(this.date.get());
         this.refresh_sidebar();
-        view.grab_focus();
         this
     }
 
@@ -370,9 +235,6 @@ impl MainWindow {
         next.connect_clicked(move |_| s.go_to(s.date.get() + Duration::days(1)));
         let s = self.clone();
         today.connect_clicked(move |_| s.go_to(Local::now().date_naive()));
-
-        let s = self.clone();
-        self.buffer.connect_changed(move |_| s.schedule_save());
 
         let s = self.clone();
         self.sidebar.connect_row_activated(move |_, row| {
@@ -404,7 +266,7 @@ impl MainWindow {
             } else {
                 s.search_entry.set_text("");
                 s.sidebar_stack.set_visible_child_name("days");
-                s.view.grab_focus();
+                s.pane.focus_current_mode();
             }
         });
 
@@ -425,54 +287,13 @@ impl MainWindow {
     }
 
     fn focus_current_mode(self: &Rc<Self>) {
-        // Only the editor asks for focus: pressing `e` means "let me type".
-        // Showing the rendered view deliberately leaves focus to GTK, so the
-        // shortcut and the toggle button behave identically — clicking the
-        // button focuses it without a focus ring, which grab_focus() from code
-        // cannot reproduce anyway. Nothing in the rendered view can steal
-        // focus now that its labels are not focusable.
-        if self.view_stack.visible_child_name().as_deref() == Some("edit") {
-            self.view.grab_focus();
-        }
-    }
-
-    /// Switches between the rendered view and the editor.
-    pub fn set_mode(self: &Rc<Self>, mode: &str) {
-        if self.view_stack.visible_child_name().as_deref() != Some(mode) {
-            if mode == "preview" {
-                // The editor may hold unsaved keystrokes the rendered view
-                // would otherwise not show.
-                self.flush_save();
-                self.render_preview();
-            }
-            self.view_stack.set_visible_child_name(mode);
-        }
-        let index = if mode == "edit" { 1 } else { 0 };
-        if self.modes.active() != index {
-            self.modes.set_active(index);
-        }
-        // Always, not only on a change: switching days also lands here with
-        // the mode already current, and focus still has to be settled.
-        self.focus_current_mode();
-    }
-
-    fn render_preview(self: &Rc<Self>) {
-        let blocks = self.store.borrow().blocks(self.date.get()).unwrap_or_default();
-        self.preview.render(&blocks);
+        self.pane.focus_current_mode();
     }
 
     /// Puts the cursor on a 0-based line and scrolls it into view — how a tray
-    /// entry and, later, a search hit navigate to their source.
+    /// entry and a search hit navigate to their source.
     pub fn scroll_to_line(self: &Rc<Self>, line: usize) {
-        // Landing on a specific line is an editing intent.
-        self.set_mode("edit");
-        let Some(mut iter) = self.buffer.iter_at_line(line as i32) else {
-            return;
-        };
-        self.buffer.place_cursor(&iter);
-        // within_margin 0.15 leaves the line a little off the top edge
-        self.view.scroll_to_iter(&mut iter, 0.15, false, 0.0, 0.0);
-        self.view.grab_focus();
+        self.pane.scroll_to_line(line);
     }
 
     pub fn go_to(self: &Rc<Self>, date: NaiveDate) {
@@ -499,26 +320,7 @@ impl MainWindow {
     }
 
     fn load(self: &Rc<Self>, date: NaiveDate) {
-        let body = match self.store.borrow().body(date) {
-            Ok(b) => b,
-            Err(e) => {
-                tracing::error!(?e, %date, "could not read day");
-                String::new()
-            }
-        };
-        self.loading.set(true);
-        self.buffer.set_text(&body);
-        self.buffer.place_cursor(&self.buffer.end_iter());
-        self.loading.set(false);
-
-        self.refresh_refs();
-        // Selecting a day always shows it rendered; `e` or the toggle opens
-        // the editor. Going through set_mode keeps focus handling in one
-        // place — poking the stack directly left focus on the hidden editor,
-        // and GTK then moved it to the first focusable widget, a label.
-        self.render_preview();
-        self.preview.scroll_to_top();
-        self.set_mode("preview");
+        self.pane.load(date);
         if self.drawer.shows_sidebar() {
             self.activity.show_day(date);
         }
@@ -531,45 +333,8 @@ impl MainWindow {
         });
     }
 
-    fn schedule_save(self: &Rc<Self>) {
-        if self.loading.get() {
-            return;
-        }
-        if let Some(id) = self.pending_save.borrow_mut().take() {
-            id.remove();
-        }
-        let s = self.clone();
-        let id = glib::timeout_add_local_once(
-            std::time::Duration::from_millis(SAVE_DEBOUNCE_MS as u64),
-            move || {
-                s.pending_save.replace(None);
-                s.save_now();
-            },
-        );
-        self.pending_save.replace(Some(id));
-    }
-
     pub fn flush_save(self: &Rc<Self>) {
-        if let Some(id) = self.pending_save.borrow_mut().take() {
-            id.remove();
-            self.save_now();
-        }
-    }
-
-    fn save_now(self: &Rc<Self>) {
-        let body = editor::text(&self.buffer);
-        let date = self.date.get();
-        if let Err(e) = self.store.borrow_mut().save(date, &body) {
-            tracing::error!(?e, %date, "could not save day");
-            return;
-        }
-        tracing::debug!(%date, bytes = body.len(), "saved");
-        self.refresh_sidebar();
-        self.push_tray();
-        self.refresh_refs();
-        if self.view_stack.visible_child_name().as_deref() == Some("preview") {
-            self.render_preview();
-        }
+        self.pane.flush_save();
     }
 
     /// Opens the search bar with the sidebar already switched to results.
@@ -663,12 +428,7 @@ impl MainWindow {
 
     /// Re-reads references and repaints them. Cheap: it works from the cache.
     pub fn refresh_refs(self: &Rc<Self>) {
-        if let Some(d) = self.refs.borrow().as_ref() {
-            d.refresh();
-        }
-        if self.view_stack.visible_child_name().as_deref() == Some("preview") {
-            self.render_preview();
-        }
+        self.pane.refresh_refs();
     }
 
     /// Hands newly-seen references to the background resolver.
@@ -676,12 +436,7 @@ impl MainWindow {
         self: &Rc<Self>,
         f: impl Fn(Vec<crate::gitlab::refs::Reference>) + 'static,
     ) {
-        let f = Rc::new(f);
-        if let Some(d) = self.refs.borrow().as_ref() {
-            let f = f.clone();
-            d.connect_resolve(move |needed| f(needed));
-        }
-        self.preview.connect_resolve_refs(move |needed| f(needed));
+        self.pane.connect_resolve_refs(f);
     }
 
     /// Appends a line to the day on screen — used by the activity drawer.
@@ -716,15 +471,12 @@ impl MainWindow {
         }
     }
 
-    /// Asks for the issue list to be refreshed, at most occasionally.
-    fn request_issue_sync(self: &Rc<Self>) {
-        if let Some(cb) = self.on_sync_issues.borrow().as_ref() {
-            cb();
-        }
+    pub fn connect_saved(self: &Rc<Self>, f: impl Fn(NaiveDate) + 'static) {
+        *self.on_saved.borrow_mut() = Some(Box::new(f));
     }
 
     pub fn connect_sync_issues(self: &Rc<Self>, f: impl Fn() + 'static) {
-        *self.on_sync_issues.borrow_mut() = Some(Box::new(f));
+        self.pane.connect_sync_issues(f);
     }
 
     /// Keeps the tray menu in step with what was just written.
