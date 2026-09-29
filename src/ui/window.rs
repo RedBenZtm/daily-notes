@@ -324,13 +324,9 @@ impl MainWindow {
         if self.drawer.shows_sidebar() {
             self.activity.show_day(date);
         }
-        self.title.set_title(&dates::short(date));
-        let today = Local::now().date_naive();
-        self.title.set_subtitle(&if date == today {
-            gettext("Today")
-        } else {
-            dates::long(date)
-        });
+        // The full date sits right below, so the title needs no tooltip.
+        self.title.set_title(&dates::relative(date, Local::now().date_naive()));
+        self.title.set_subtitle(&dates::long(date));
     }
 
     pub fn flush_save(self: &Rc<Self>) {
@@ -397,8 +393,10 @@ impl MainWindow {
                 .replace("{}", &hits.len().to_string()),
         );
 
+        let today = Local::now().date_naive();
         for hit in hits {
-            let date = gtk::Label::new(Some(&dates::short(hit.date)));
+            let date = gtk::Label::new(Some(&dates::relative(hit.date, today)));
+            date.set_tooltip_text(Some(&dates::long(hit.date)));
             date.set_xalign(0.0);
             date.add_css_class("dim-label");
             date.add_css_class("caption");
@@ -507,11 +505,13 @@ impl MainWindow {
         }
 
         for d in days {
-            let label = gtk::Label::new(Some(&dates::short(d)));
+            let text = dates::relative(d, today);
+            let label = gtk::Label::new(Some(&text));
             label.set_xalign(0.0);
+            label.set_tooltip_text(Some(&dates::long(d)));
             let row = gtk::ListBoxRow::builder().child(&label).build();
             if d == today {
-                label.set_markup(&format!("<b>{}</b>", glib::markup_escape_text(&dates::short(d))));
+                label.set_markup(&format!("<b>{}</b>", glib::markup_escape_text(&text)));
             }
             unsafe {
                 row.set_data("date", d.format(crate::store::days::DATE_FMT).to_string());

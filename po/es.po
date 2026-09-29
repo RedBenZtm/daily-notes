@@ -26,7 +26,9 @@ msgstr "Hoy · {}"
 msgid "Last workday · {}"
 msgstr "Último día laborable · {}"
 
-#: src/app.rs:97 src/ui/quicknote.rs:525
+#. Not the preview's own empty page: that one invites writing,
+#. and there is nothing to write here.
+#: src/app.rs:97 src/ui/quicknote.rs:632
 msgid "No earlier notes"
 msgstr "No hay notas anteriores"
 
@@ -85,8 +87,8 @@ msgstr "(sin entradas)"
 msgid "Open in window"
 msgstr "Abrir en una ventana"
 
-#: src/tray/mod.rs:225 src/tray/mod.rs:244 src/ui/quicknote.rs:44
-#: src/ui/window.rs:60 src/ui/window.rs:208
+#: src/tray/mod.rs:225 src/tray/mod.rs:244 src/ui/quicknote.rs:49
+#: src/ui/window.rs:48 src/ui/window.rs:164
 msgid "Daily Notes"
 msgstr "Notas diarias"
 
@@ -97,7 +99,7 @@ msgid_plural "{} entries today"
 msgstr[0] "{} entrada hoy"
 msgstr[1] "{} entradas hoy"
 
-#: src/tray/mod.rs:267 src/ui/quicknote.rs:114
+#: src/tray/mod.rs:267 src/ui/quicknote.rs:141
 msgid "Quick Note"
 msgstr "Nota rápida"
 
@@ -133,16 +135,64 @@ msgstr "Añadir a la nota"
 msgid "Issues"
 msgstr "Incidencias"
 
-#: src/ui/preview.rs:95
+#: src/ui/dates.rs:46 src/ui/window.rs:55
+msgid "Today"
+msgstr "Hoy"
+
+#: src/ui/dates.rs:47
+msgid "Yesterday"
+msgstr "Ayer"
+
+#: src/ui/dates.rs:48
+msgid "Tomorrow"
+msgstr "Mañana"
+
+#: src/ui/dates.rs:58
+msgid "Last Monday"
+msgstr "El lunes pasado"
+
+#: src/ui/dates.rs:59
+msgid "Last Tuesday"
+msgstr "El martes pasado"
+
+#: src/ui/dates.rs:60
+msgid "Last Wednesday"
+msgstr "El miércoles pasado"
+
+#: src/ui/dates.rs:61
+msgid "Last Thursday"
+msgstr "El jueves pasado"
+
+#: src/ui/dates.rs:62
+msgid "Last Friday"
+msgstr "El viernes pasado"
+
+#: src/ui/dates.rs:63
+msgid "Last Saturday"
+msgstr "El sábado pasado"
+
+#: src/ui/dates.rs:64
+msgid "Last Sunday"
+msgstr "El domingo pasado"
+
+#: src/ui/day_pane.rs:289
+msgid "Edit ({})"
+msgstr "Editar ({})"
+
+#: src/ui/day_pane.rs:295
+msgid "Rendered view ({})"
+msgstr "Vista renderizada ({})"
+
+#: src/ui/preview.rs:190
 msgid "Nothing written yet"
 msgstr "Todavía no hay nada escrito"
 
 #. Translators: {} is a keyboard key, shown literally.
-#: src/ui/preview.rs:97
+#: src/ui/preview.rs:192
 msgid "Press {} to start writing."
 msgstr "Pulsa {} para empezar a escribir."
 
-#: src/ui/quicknote.rs:52
+#: src/ui/quicknote.rs:57
 msgid "Add an entry…"
 msgstr "Añadir una entrada…"
 
@@ -151,35 +201,31 @@ msgstr "Añadir una entrada…"
 #. free depends on the language, so translators place it, not us. These
 #. are separate msgids from the tray's labels for that reason — a bare
 #. underscore means something else entirely in a dbusmenu label.
-#: src/ui/quicknote.rs:62
+#: src/ui/quicknote.rs:67
 msgid "_Last workday"
 msgstr "Ú_ltimo día laborable"
 
-#: src/ui/quicknote.rs:63
+#: src/ui/quicknote.rs:68
 msgid "_Search…"
 msgstr "_Buscar…"
 
-#: src/ui/quicknote.rs:64
+#: src/ui/quicknote.rs:69
 msgid "_Open"
 msgstr "_Abrir"
 
-#: src/ui/quicknote.rs:335 src/ui/window.rs:67 src/ui/window.rs:528
-msgid "Today"
-msgstr "Hoy"
-
-#: src/ui/quicknote.rs:347
+#: src/ui/quicknote.rs:419
 msgid "Nothing yet today"
 msgstr "Nada todavía hoy"
 
-#: src/ui/quicknote.rs:348
+#: src/ui/quicknote.rs:420
 msgid "Type below to add your first entry."
 msgstr "Escribe abajo para añadir tu primera entrada."
 
-#: src/ui/quicknote.rs:371
+#: src/ui/quicknote.rs:443
 msgid "Drag to reorder"
 msgstr "Arrastra para reordenar"
 
-#: src/ui/quicknote.rs:384
+#: src/ui/quicknote.rs:456
 msgid "Delete entry"
 msgstr "Eliminar entrada"
 
@@ -307,54 +353,44 @@ msgstr "Conectado, pero este token no puede ver {}"
 msgid "Connection failed"
 msgstr "Error de conexión"
 
-#: src/ui/window.rs:64
+#: src/ui/window.rs:52
 msgid "Previous day"
 msgstr "Día anterior"
 
-#: src/ui/window.rs:66
+#: src/ui/window.rs:54
 msgid "Next day"
 msgstr "Día siguiente"
 
-#: src/ui/window.rs:106
+#: src/ui/window.rs:94
 msgid "Recent days"
 msgstr "Días recientes"
 
-#: src/ui/window.rs:117
+#: src/ui/window.rs:105
 msgid "Search all notes…"
 msgstr "Buscar en todas las notas…"
 
-#. Translators: {} is a key combination, shown literally.
-#: src/ui/window.rs:144
-msgid "Rendered view ({})"
-msgstr "Vista renderizada ({})"
-
-#. Translators: {} is a keyboard key, shown literally.
-#: src/ui/window.rs:152
-msgid "Edit ({})"
-msgstr "Editar ({})"
-
-#: src/ui/window.rs:158
+#: src/ui/window.rs:115
 msgid "GitLab activity"
 msgstr "Actividad de GitLab"
 
-#: src/ui/window.rs:162
+#: src/ui/window.rs:119
 msgid "Search all notes"
 msgstr "Buscar en todas las notas"
 
-#: src/ui/window.rs:603
+#: src/ui/window.rs:364
 msgid "Type to search your notes."
 msgstr "Escribe para buscar en tus notas."
 
-#: src/ui/window.rs:615
+#: src/ui/window.rs:376
 msgid "Search failed."
 msgstr "Error en la búsqueda."
 
-#: src/ui/window.rs:624
+#: src/ui/window.rs:385
 msgid "No notes match “{}”."
 msgstr "Ninguna nota coincide con «{}»."
 
 #. Translators: {} is the number of search results.
-#: src/ui/window.rs:631
+#: src/ui/window.rs:392
 msgid "{} result"
 msgid_plural "{} results"
 msgstr[0] "{} resultado"

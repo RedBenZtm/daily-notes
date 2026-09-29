@@ -405,13 +405,9 @@ impl QuickNote {
 
     fn reload(self: &Rc<Self>) {
         let date = self.date.get();
-        self.title.set_title(&dates::short(date));
-        let today = Local::now().date_naive();
-        self.title.set_subtitle(&if date == today {
-            gettext("Today")
-        } else {
-            dates::long(date)
-        });
+        // The full date sits right below, so the title needs no tooltip.
+        self.title.set_title(&dates::relative(date, Local::now().date_naive()));
+        self.title.set_subtitle(&dates::long(date));
 
         while let Some(child) = self.list.first_child() {
             self.list.remove(&child);
@@ -623,7 +619,8 @@ impl QuickNote {
         match store.last_workday(self.date.get()).ok().flatten() {
             Some(prev) => {
                 drop(store);
-                self.drawer_title.set_text(&dates::long(prev));
+                self.drawer_title.set_text(&dates::relative(prev, Local::now().date_naive()));
+                self.drawer_title.set_tooltip_text(Some(&dates::long(prev)));
                 self.drawer_title.remove_css_class("dim-label");
                 self.last_workday.load(prev);
                 self.last_workday.widget.set_visible(true);
@@ -633,6 +630,7 @@ impl QuickNote {
                 // Not the preview's own empty page: that one invites writing,
                 // and there is nothing to write here.
                 self.drawer_title.set_text(&gettext("No earlier notes"));
+                self.drawer_title.set_tooltip_text(None);
                 self.drawer_title.add_css_class("dim-label");
                 self.last_workday.widget.set_visible(false);
             }
