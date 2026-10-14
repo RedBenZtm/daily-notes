@@ -9,6 +9,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use gtk::prelude::*;
+use gtk::glib;
+use glib::subclass::types::ObjectSubclassExt as _;
 
 
 use crate::i18n::gettext;
@@ -49,10 +51,11 @@ impl Preview {
         content.set_margin_start(20);
         content.set_margin_end(20);
 
-        let clamp = adw::Clamp::builder()
-            .maximum_size(760)
-            .tightening_threshold(600)
+        // Not `adw::Clamp`: it always centres the capped column, so on a wide
+        // window the text drifted away from the left edge.
+        let clamp = adw::Bin::builder()
             .child(&content)
+            .layout_manager(&LeadingClamp::new(760))
             .build();
 
         let scroll = gtk::ScrolledWindow::builder()
@@ -278,3 +281,89 @@ impl Preview {
     }
 }
 
+
+mod leading_clamp {
+    use std::cell::Cell;
+
+    use gtk::prelude::*;
+    use gtk::subclass::prelude::*;
+    use gtk::glib;
+
+    #[derive(Default)]
+    pub struct LeadingClamp {
+        pub maximum: Cell<i32>,
+    }
+
+    #[glib::object_subclass]
+    impl ObjectSubclass for LeadingClamp {
+        const NAME: &'static str = "DailyNotesLeadingClamp";
+        type Type = super::LeadingClamp;
+        type ParentType = gtk::LayoutManager;
+    }
+
+    impl ObjectImpl for LeadingClamp {}
+
+    impl LayoutManagerImpl for LeadingClamp {
+        fn request_mode(&self, _widget: &gtk::Widget) -> gtk::SizeRequestMode {
+            // Wrapped labels get taller as they get narrower.
+            gtk::SizeRequestMode::HeightForWidth
+        }
+
+        fn measure(
+            &self,
+            widget: &gtk::Widget,
+            orientation: gtk::Orientation,
+            for_size: i32,
+        ) -> (i32, i32, i32, i32) {
+            let Some(child) = widget.first_child() else {
+                return (0, 0, -1, -1);
+            };
+            match orientation {
+                gtk::Orientation::Horizontal => {
+                    let (min, nat, _, _) = child.measure(orientation, -1);
+                    (min, nat.min(self.maximum.get()).max(min), -1, -1)
+                }
+                _ => {
+                    let width = if for_size < 0 { -1 } else { self.child_width(&child, for_size) };
+                    child.measure(orientation, width)
+                }
+            }
+        }
+
+        fn allocate(&self, widget: &gtk::Widget, width: i32, height: i32, baseline: i32) {
+            let Some(child) = widget.first_child() else {
+                return;
+            };
+            let w = self.child_width(&child, width);
+            let x = match widget.direction() {
+                gtk::TextDirection::Rtl => width - w,
+                _ => 0,
+            };
+            child.size_allocate(&gtk::Allocation::new(x, 0, w, height), baseline);
+        }
+    }
+
+    impl LeadingClamp {
+        /// The available width, capped at the maximum but never below what
+        /// the child needs.
+        fn child_width(&self, child: &gtk::Widget, available: i32) -> i32 {
+            let (min, _, _, _) = child.measure(gtk::Orientation::Horizontal, -1);
+            available.min(self.maximum.get()).max(min)
+        }
+    }
+}
+
+glib::wrapper! {
+    /// Caps a child's width like `adw::Clamp`, but keeps it on the leading
+    /// edge instead of centring it in the spare width.
+    pub struct LeadingClamp(ObjectSubclass<leading_clamp::LeadingClamp>)
+        @extends gtk::LayoutManager;
+}
+
+impl LeadingClamp {
+    fn new(maximum: i32) -> Self {
+        let obj: Self = glib::Object::new();
+        leading_clamp::LeadingClamp::from_obj(&obj).maximum.set(maximum);
+        obj
+    }
+}
