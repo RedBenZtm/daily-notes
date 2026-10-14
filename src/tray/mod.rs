@@ -322,7 +322,9 @@ impl Tray for DailyNotesTray {
 pub fn icon_path() -> String {
     std::env::var("DAILY_NOTES_ICON").unwrap_or_else(|_| {
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("data/icons/hicolor/scalable/apps/de.ztm.DailyNotes-symbolic.svg")
+            // Not `-symbolic`: GTK and the shell recolour any icon with that
+            // suffix to the plain foreground colour, dropping its colours.
+            .join("data/icons/hicolor/scalable/apps/de.ztm.DailyNotes.svg")
             .to_string_lossy()
             .into_owned()
     })

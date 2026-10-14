@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <title>Daily Note — Time</title>
+  <desc>A blue folded-corner note page with three white writing lines and a clock overlapping its lower-right edge.</desc>
+
+  <!-- Page silhouette, intentionally without a separate app tile -->
+  <path d="M53 18H158L211 71V191
+           C211 204.8 199.8 216 186 216H53
+           C39.2 216 28 204.8 28 191V43
+           C28 29.2 39.2 18 53 18Z"
+        fill="#3584E4"/>
+
+  <!-- Folded page corner -->
+  <path d="M158 18V53
+           C158 62.9 166.1 71 176 71H211Z"
+        fill="#A9D0FF"/>
+
+  <!-- Writing lines -->
+  <path d="M62 91H151
+           M62 117H151
+           M62 143H112"
+        fill="none" stroke="#FFFFFF" stroke-width="9" stroke-linecap="round"/>
+
+  <!-- Clock overlaps the page edge to make the temporal meaning immediate -->
+  <circle cx="174" cy="169" r="48" fill="#3584E4" stroke="#FFFFFF" stroke-width="8"/>
+
+  <!-- Simple clock hands; no tiny ticks so it remains legible at small sizes -->
+  <path d="M174 143V169L192 181"
+        fill="none" stroke="#FFFFFF" stroke-width="7"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="174" cy="169" r="4" fill="#FFFFFF"/>
+</svg>
