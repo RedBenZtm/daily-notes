@@ -264,6 +264,9 @@ impl MainWindow {
                 s.search_entry.grab_focus();
                 s.run_search();
             } else {
+                if let Some(id) = s.pending_search.borrow_mut().take() {
+                    id.remove();
+                }
                 s.search_entry.set_text("");
                 s.sidebar_stack.set_visible_child_name("days");
                 s.pane.focus_current_mode();
@@ -352,6 +355,12 @@ impl MainWindow {
     }
 
     fn run_search(self: &Rc<Self>) {
+        // Closing the bar clears the entry, and that change arrives as a
+        // search like any other — sometimes after the bar is already gone.
+        // Running it would flip the sidebar back to results with no bar open.
+        if !self.search_bar.is_search_mode() {
+            return;
+        }
         let query = self.search_entry.text().to_string();
         self.sidebar_stack.set_visible_child_name("results");
 
