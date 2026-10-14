@@ -159,7 +159,7 @@ impl MainWindow {
 
         let window = adw::ApplicationWindow::builder()
             .application(app)
-            .default_width(900)
+            .default_width(1080)
             .default_height(640)
             .title(gettext("Daily Notes"))
             .content(&split)
