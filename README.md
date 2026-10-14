@@ -1,7 +1,7 @@
 # Daily Notes
 
-A small GNOME app for keeping a work log, one page per day. It sits in the top
-bar as a tray icon, so jotting something down is a click or a keystroke away,
+A small Linux desktop app (GNOME, KDE Plasma) for keeping a work log, one page
+per day. It sits in the panel as a tray icon, so jotting something down is a click or a keystroke away,
 and it understands GitLab references (`#123`, `&7`, …) well enough to show what
 they point to.
 
@@ -17,19 +17,29 @@ desktop's language and date-format settings.
 
 ## Requirements
 
-- Rust toolchain with edition 2024 support (Rust 1.85 or newer)
-- GTK 4.22, libadwaita 1.9 and GtkSourceView 5.16 development packages
-  (GNOME 50). On Fedora:
+- Rust 1.92 or newer (the minimum for gtk4-rs 0.11). Debian 13's packaged
+  `rustc` is older, so install the toolchain with [rustup](https://rustup.rs).
+- GTK 4.18, libadwaita 1.7 and GtkSourceView 5.16 or newer, with their
+  development packages (GNOME 48 or later). On Fedora:
 
   ```sh
   sudo dnf install gtk4-devel libadwaita-devel gtksourceview5-devel
   ```
 
+  On Debian 13:
+
+  ```sh
+  sudo apt install build-essential pkg-config \
+      libgtk-4-dev libadwaita-1-dev libgtksourceview-5-dev
+  ```
+
 - For the tray icon on GNOME: the
   [AppIndicator and KStatusNotifierItem Support](https://extensions.gnome.org/extension/615/appindicator-support/)
-  extension. Without it the app still works, just without the icon.
-- Optional, for GitLab integration: a running secret service (GNOME Keyring),
-  which stores the access token.
+  extension. Without it the app still works, just without the icon. KDE Plasma
+  shows the icon without anything extra.
+- Optional, for GitLab integration: a running secret service, which stores the
+  access token. GNOME Keyring provides one; on KDE Plasma, KWallet does. If
+  the token does not stick on KDE, install `gnome-keyring` as well.
 - Optional, for translations: GNU gettext and `xtr` (`cargo install xtr`).
 
 ## Building
@@ -52,7 +62,7 @@ cargo run
 target/debug/daily-notes
 ```
 
-This opens the main window and puts the Daily Notes icon in the top bar.
+This opens the main window and puts the Daily Notes icon in the panel.
 
 Only one instance ever runs. Starting `daily-notes` again while it is already
 running does not launch a second copy; it brings the running one's window to
@@ -76,6 +86,10 @@ tools/install-keybinding.sh --remove           # remove the binding
 
 The shortcut runs `target/debug/daily-notes --quick-note` from this checkout
 unless you pass a different command as the second argument.
+
+The script only works on GNOME. On KDE Plasma, add the shortcut by hand under
+**System Settings → Keyboard → Shortcuts → Add New → Command or Script**, with
+the full path to `daily-notes --quick-note` as the command.
 
 ### Stop
 
@@ -110,7 +124,8 @@ Everything lives in `~/.daily_notes/`:
 | `config.toml` | GitLab instance, main project, main group  |
 
 Set these up under **Settings** in the tray menu. The GitLab access token is
-stored in the GNOME keyring, never in `config.toml`.
+stored in the desktop's secret service (GNOME Keyring or KWallet), never in
+`config.toml`.
 
 Environment variables:
 

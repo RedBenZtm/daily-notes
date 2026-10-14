@@ -5,14 +5,16 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-adw = { version = "0.9", package = "libadwaita", features = ["v1_9", "gtk_v4_22"] }
+adw = { version = "0.9", package = "libadwaita", features = ["v1_7", "gtk_v4_18"] }
 anyhow = "1.0.104"
 async-channel = "2"
 chrono = { version = "0.4", features = ["serde"] }
 gettext-rs = { version = "0.8.0", features = ["gettext-system"] }
-# gnome_50 matches this machine exactly (GTK 4.22 / GNOME 50) and pins the
-# companion gtk-rs crates to one coherent set.
-gtk = { version = "0.11", package = "gtk4", features = ["gnome_50"] }
+# The oldest stack we build against: gnome_48 (GTK 4.18, libadwaita 1.7,
+# GtkSourceView 5.16) is what Debian 13 ships. These are minimums only —
+# a newer system such as Fedora runs its own newer libraries unchanged.
+# gnome_48 also pins the companion gtk-rs crates to one coherent set.
+gtk = { version = "0.11", package = "gtk4", features = ["gnome_48"] }
 keyring = "4.2.0"
 ksni = { version = "0.3", default-features = false, features = ["tokio"] }
 regex = "1.13.1"
