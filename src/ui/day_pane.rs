@@ -354,8 +354,11 @@ impl DayPane {
     }
 
     fn render_preview(&self) {
-        let blocks = self.store.borrow().blocks(self.date.get()).unwrap_or_default();
-        self.preview.render(&blocks);
+        let store = self.store.borrow();
+        let blocks = store.blocks(self.date.get()).unwrap_or_default();
+        let body = store.body(self.date.get()).unwrap_or_default();
+        drop(store);
+        self.preview.render(&blocks, &body);
     }
 
     /// Re-reads references and repaints them. Cheap: it works from the cache.

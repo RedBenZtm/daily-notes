@@ -184,6 +184,52 @@ pub fn parse(body: &str) -> Vec<Block> {
     blocks
 }
 
+/// One item of a list block, as the rendered view shows it.
+#[derive(Debug, PartialEq, Eq)]
+pub struct ListItem {
+    pub depth: usize,
+    /// 0-based, inclusive.
+    pub line_start: usize,
+    pub line_end: usize,
+    /// Marker stripped, continuation lines joined.
+    pub text: String,
+}
+
+/// Splits a bullet block back into its items. `parse` keeps nested items with
+/// their parent so search and Quick Note treat them as one entry, but the
+/// rendered view still has to show the nesting.
+pub fn list_items(body: &str, block: &Block) -> Vec<ListItem> {
+    let mut items: Vec<ListItem> = Vec::new();
+    // Indents of the open nesting levels; depth is how many enclose an item.
+    let mut indents: Vec<usize> = Vec::new();
+    let lines = body.lines().enumerate().skip(block.line_start);
+    for (n, line) in lines.take(block.line_end + 1 - block.line_start) {
+        match bullet_marker_len(line) {
+            Some(skip) => {
+                let indent = line.len() - line.trim_start().len();
+                while indents.last().is_some_and(|&i| i >= indent) {
+                    indents.pop();
+                }
+                indents.push(indent);
+                items.push(ListItem {
+                    depth: indents.len() - 1,
+                    line_start: n,
+                    line_end: n,
+                    text: line[skip..].trim().to_string(),
+                });
+            }
+            None => {
+                if let Some(item) = items.last_mut() {
+                    item.line_end = n;
+                    item.text.push(' ');
+                    item.text.push_str(line.trim());
+                }
+            }
+        }
+    }
+    items
+}
+
 fn push(blocks: &mut Vec<Block>, line_start: usize, line_end: usize, kind: Kind, text: String) {
     if text.trim().is_empty() && kind != Kind::Code {
         return;
@@ -248,6 +294,26 @@ mod tests {
             vec![
                 (Kind::Bullet, 0, 2, "deploy staging prod".into()),
                 (Kind::Bullet, 3, 3, "unrelated".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn list_items_keep_their_nesting() {
+        let body = "# T\n- deploy\n    - staging\n      still staging\n        - eu\n  - prod\n- other\n";
+        let block = &parse(body)[1];
+        let got: Vec<_> = list_items(body, block)
+            .into_iter()
+            .map(|i| (i.depth, i.line_start, i.line_end, i.text))
+            .collect();
+        assert_eq!(
+            got,
+            vec![
+                (0, 1, 1, "deploy".into()),
+                (1, 2, 3, "staging still staging".into()),
+                (2, 4, 4, "eu".into()),
+                // shallower than "staging" but still under "deploy"
+                (1, 5, 5, "prod".into()),
             ]
         );
     }
