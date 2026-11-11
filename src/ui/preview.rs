@@ -14,6 +14,7 @@ use glib::subclass::types::ObjectSubclassExt as _;
 
 
 use crate::i18n::gettext;
+use crate::store::blocks::list_items;
 use crate::store::{Block, Kind, Store};
 use crate::ui::markup;
 use crate::ui::refs::{open_link, RefResolver};
@@ -180,7 +181,9 @@ impl Preview {
         l
     }
 
-    pub fn render(self: &Rc<Self>, blocks: &[Block]) {
+    /// `body` is the source `blocks` were parsed from; list blocks are split
+    /// back into their nested items from it.
+    pub fn render(self: &Rc<Self>, blocks: &[Block], body: &str) {
         while let Some(child) = self.content.first_child() {
             self.content.remove(&child);
         }
@@ -222,17 +225,20 @@ impl Preview {
                     self.content.append(&l);
                 }
                 Kind::Bullet => {
-                    let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-                    row.set_valign(gtk::Align::Start);
-                    let dot = gtk::Label::new(Some("•"));
-                    dot.set_valign(gtk::Align::Start);
-                    dot.add_css_class("dimmed");
-                    row.append(&dot);
-                    let l = self.label(&markup::to_pango(&block.text, &|r| resolver.lookup(r)));
-                    l.set_hexpand(true);
-                    targets.push((l.clone(), block.line_start, block.line_end));
-                    row.append(&l);
-                    self.content.append(&row);
+                    for item in list_items(body, block) {
+                        let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+                        row.set_valign(gtk::Align::Start);
+                        row.set_margin_start(item.depth as i32 * 20);
+                        let dot = gtk::Label::new(Some(["•", "◦", "▪"][item.depth % 3]));
+                        dot.set_valign(gtk::Align::Start);
+                        dot.add_css_class("dimmed");
+                        row.append(&dot);
+                        let l = self.label(&markup::to_pango(&item.text, &|r| resolver.lookup(r)));
+                        l.set_hexpand(true);
+                        targets.push((l.clone(), item.line_start, item.line_end));
+                        row.append(&l);
+                        self.content.append(&row);
+                    }
                 }
                 Kind::Para => {
                     let l = self.label(&markup::to_pango(&block.text, &|r| resolver.lookup(r)));
