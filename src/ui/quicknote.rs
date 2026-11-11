@@ -151,7 +151,8 @@ impl QuickNote {
 
         let window = adw::Window::builder()
             .application(app)
-            .default_width(420)
+            .width_request(MIN_WIDTH)
+            .default_width(MIN_WIDTH)
             .default_height(380)
             .resizable(true)
             .title(gettext("Quick Note"))
@@ -315,6 +316,13 @@ impl QuickNote {
     }
 
     pub fn present_for(self: &Rc<Self>, date: NaiveDate) {
+        // Half the screen tall on each opening, but leave a window that is
+        // already up alone: the user may have resized it.
+        if !self.window.is_visible() {
+            if let Some(height) = self.monitor_height() {
+                self.window.set_default_height(height / 2);
+            }
+        }
         self.date.set(date);
         self.reload();
         // Not on every reload: that runs after each entry added here, and
@@ -332,6 +340,18 @@ impl QuickNote {
             s.add.grab_focus();
             s.reveal_add_field();
         });
+    }
+
+    /// The height of the monitor the window was last on, or of the first one
+    /// before it has ever been shown.
+    fn monitor_height(&self) -> Option<i32> {
+        let display = gtk::prelude::WidgetExt::display(&self.window);
+        let monitor = self
+            .window
+            .surface()
+            .and_then(|surface| display.monitor_at_surface(&surface))
+            .or_else(|| display.monitors().item(0).and_downcast::<gdk::Monitor>())?;
+        Some(monitor.geometry().height())
     }
 
     /// Back to the new-entry field once an entry is done with, so the next one
@@ -767,3 +787,5 @@ impl QuickNote {
 
 /// How much the drawer adds to the window.
 const DRAWER_WIDTH: i32 = 360;
+/// The Quick Note window never gets narrower than this.
+const MIN_WIDTH: i32 = 800;
