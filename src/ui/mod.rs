@@ -3,7 +3,6 @@ pub mod completion;
 pub mod dates;
 pub mod day_pane;
 pub mod editor;
-pub mod entry_completion;
 pub mod lines;
 pub mod markup;
 pub mod preview;

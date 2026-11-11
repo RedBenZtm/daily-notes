@@ -6,7 +6,7 @@ use sourceview5::prelude::*;
 pub fn build() -> (sourceview5::View, sourceview5::Buffer) {
     let buffer = sourceview5::Buffer::new(None);
 
-    if let Some(lang) = sourceview5::LanguageManager::default().language("markdown") {
+    if let Some(lang) = language() {
         buffer.set_language(Some(&lang));
     }
     // Follow the desktop's light/dark preference rather than a fixed scheme.
@@ -48,7 +48,58 @@ pub fn build() -> (sourceview5::View, sourceview5::Buffer) {
     (view, buffer)
 }
 
+/// The markdown flavour this app writes; see the comment in the spec file.
+const LANGUAGE_SPEC: &str = include_str!("../../data/language-specs/daily-notes-markdown.lang");
+
+fn language() -> Option<sourceview5::Language> {
+    static SETUP: std::sync::Once = std::sync::Once::new();
+    let manager = sourceview5::LanguageManager::default();
+    // The manager only reads specs from directories, and only until it first
+    // loads one, so the embedded spec is written out before that.
+    SETUP.call_once(|| {
+        let dir = gtk::glib::user_runtime_dir().join("daily-notes/language-specs");
+        let written = std::fs::create_dir_all(&dir)
+            .and_then(|()| std::fs::write(dir.join("daily-notes-markdown.lang"), LANGUAGE_SPEC));
+        match written {
+            Ok(()) => manager.prepend_search_path(&dir.to_string_lossy()),
+            Err(e) => tracing::warn!(?e, "could not write the markdown language spec"),
+        }
+    });
+    manager
+        .language("daily-notes-markdown")
+        .or_else(|| manager.language("markdown"))
+}
+
 pub fn text(buffer: &sourceview5::Buffer) -> String {
     let (start, end) = buffer.bounds();
     buffer.text(&start, &end, false).to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use sourceview5::prelude::*;
+
+    /// Whether the character at `offset` on the only line is drawn bold,
+    /// which is how the Adwaita schemes style headings.
+    fn bold_at(text: &str, offset: i32) -> bool {
+        let (_, buffer) = super::build();
+        buffer.set_text(text);
+        buffer.ensure_highlight(&buffer.start_iter(), &buffer.end_iter());
+        buffer
+            .iter_at_offset(offset)
+            .tags()
+            .iter()
+            .any(|t| t.weight() >= 700)
+    }
+
+    #[test]
+    fn a_leading_reference_is_not_a_heading() {
+        // Highlighting needs a display; skip where there is none, e.g. CI.
+        if gtk::init().is_err() {
+            return;
+        }
+        assert!(bold_at("# Today", 3), "control: a real heading is bold");
+        assert!(!bold_at("#142 fixed the login", 8));
+        assert!(!bold_at("##foo bar", 6));
+    }
 }
