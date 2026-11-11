@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Markdown as Daily Notes reads it.
+
+  The stock markdown.lang styles any line that starts with `#` as a heading
+  (`^#+.+`), so an entry opening with a GitLab reference such as `#142` lit up
+  as one, all the way to the end of the line. The app only takes `#` followed
+  by a space for a heading (store::blocks::heading_len). This consumes a run
+  of `#` glued to text before the stock rules see the line; everything else
+  is the stock language.
+-->
+<language id="daily-notes-markdown" name="Markdown (Daily Notes)" version="2.0" hidden="true">
+  <definitions>
+    <context id="daily-notes-markdown">
+      <include>
+        <context id="not-a-heading">
+          <match>^#+(?=[^#\s])</match>
+        </context>
+        <context ref="markdown:markdown"/>
+      </include>
+    </context>
+  </definitions>
+</language>
