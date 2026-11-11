@@ -1,8 +1,8 @@
 //! The compact capture window.
 //!
 //! This is the surface the tray opens: today's entries, editable in place,
-//! with one field to add another. It is deliberately not an editor — anything
-//! structural happens in the main window.
+//! with one field to add another. Both edit markdown source the way the main
+//! window does: Enter is a new line, Ctrl+Enter finishes the entry.
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -14,10 +14,11 @@ use gtk::gdk;
 
 use crate::i18n::gettext;
 use crate::gitlab::refs::Reference;
-use crate::store::{blocks, Block, Store};
+use crate::store::{blocks, Block, Kind, Store};
+use crate::ui::completion::IssueCompletion;
+use crate::ui::editor;
 use crate::ui::markup;
 use crate::ui::day_pane::DayPane;
-use crate::ui::entry_completion;
 use crate::ui::refs::{open_link, RefResolver};
 use crate::ui::dates;
 
@@ -26,7 +27,8 @@ pub struct QuickNote {
     store: Rc<RefCell<Store>>,
     date: Rc<Cell<NaiveDate>>,
     list: gtk::ListBox,
-    add: gtk::Entry,
+    add: sourceview5::View,
+    add_buffer: sourceview5::Buffer,
     title: adw::WindowTitle,
     /// The previous workday in a drawer beside the entries, shown and edited
     /// the same way as in the main window.
@@ -53,11 +55,25 @@ impl QuickNote {
         list.set_selection_mode(gtk::SelectionMode::None);
         list.add_css_class("boxed-list");
 
-        let add = gtk::Entry::builder()
-            .placeholder_text(gettext("Add an entry…"))
-            .primary_icon_name("list-add-symbolic")
-            .activates_default(false)
+        let (add, add_buffer) = editor::build();
+        // GtkTextView has no placeholder of its own.
+        let placeholder = gtk::Label::new(Some(&gettext("Add an entry…")));
+        placeholder.add_css_class("dim-label");
+        placeholder.set_halign(gtk::Align::Start);
+        placeholder.set_valign(gtk::Align::Start);
+        placeholder.set_margin_top(6);
+        placeholder.set_margin_start(8);
+        placeholder.set_can_target(false);
+        add_buffer
+            .bind_property("text", &placeholder, "visible")
+            .transform_to(|_, text: String| Some(text.is_empty()))
+            .sync_create()
             .build();
+        let add_field = gtk::Overlay::new();
+        add_field.set_child(Some(&add));
+        add_field.add_overlay(&placeholder);
+        let add_frame = gtk::Frame::new(None);
+        add_frame.set_child(Some(&add_field));
 
         // Mnemonics, so the buttons are reachable without leaving the entry.
         // The underscore is part of the translatable string: which letter is
@@ -81,7 +97,7 @@ impl QuickNote {
         body.set_margin_start(12);
         body.set_margin_end(12);
         body.append(&list);
-        body.append(&add);
+        body.append(&add_frame);
 
         let scroll = gtk::ScrolledWindow::builder()
             .hscrollbar_policy(gtk::PolicyType::Never)
@@ -148,6 +164,7 @@ impl QuickNote {
             date: Rc::new(Cell::new(Local::now().date_naive())),
             list,
             add,
+            add_buffer,
             title,
             drawer: drawer_side,
             drawer_title,
@@ -160,22 +177,28 @@ impl QuickNote {
             scroll: scroll.clone(),
         });
 
+        // An editor that just grew a line has only now been laid out at its new
+        // height, which is when the scrolled window reconfigures its adjustment.
         {
-            // `#` offers the project's issues here too, not only in the editor.
-            let s = this.clone();
-            entry_completion::attach(&this.add, this.store.clone(), move || s.sync_issues());
+            let s = Rc::downgrade(&this);
+            scroll.vadjustment().connect_changed(move |_| {
+                if let Some(s) = s.upgrade() {
+                    s.reveal_focused_cursor();
+                }
+            });
         }
+
         {
             let s = this.clone();
-            this.add.connect_activate(move |e| {
-                let text = e.text().trim().to_string();
-                if text.is_empty() {
+            this.wire_entry_editor(&this.add, move || {
+                let text = editor::text(&s.add_buffer);
+                if text.trim().is_empty() {
                     return;
                 }
-                s.append_entry(&text);
-                e.set_text("");
+                s.add_buffer.set_text("");
+                s.append_entry(text.trim_end());
                 // stay focused so several entries can be typed in a row
-                e.grab_focus();
+                s.focus_add();
             });
         }
         {
@@ -311,17 +334,88 @@ impl QuickNote {
         });
     }
 
+    /// Back to the new-entry field once an entry is done with, so the next one
+    /// can be typed straight away.
+    fn focus_add(self: &Rc<Self>) {
+        self.add.grab_focus();
+        // Deferred: the rows were just rebuilt, so nothing is laid out yet.
+        let s = self.clone();
+        glib::idle_add_local_once(move || s.reveal_add_field());
+    }
+
+    /// Sets up a markdown editor for writing one entry: the main window's
+    /// editor, made compact, with `#` completion; Ctrl+Enter calls `commit`.
+    fn wire_entry_editor(self: &Rc<Self>, view: &sourceview5::View, commit: impl Fn() + 'static) {
+        {
+            let s = Rc::downgrade(self);
+            view.buffer().connect_cursor_position_notify(move |_| {
+                let s = s.clone();
+                // Deferred: the line the caret moved to may not be laid out yet.
+                glib::idle_add_local_once(move || {
+                    if let Some(s) = s.upgrade() {
+                        s.reveal_focused_cursor();
+                    }
+                });
+            });
+        }
+        view.set_hexpand(true);
+        view.set_top_margin(6);
+        view.set_bottom_margin(6);
+        view.set_left_margin(8);
+        view.set_right_margin(8);
+        {
+            use sourceview5::prelude::*;
+            let provider = IssueCompletion::new(self.store.clone());
+            let s = self.clone();
+            provider.connect_query(move || s.sync_issues());
+            view.completion().add_provider(&provider);
+        }
+        // Capture phase, as in the main editor: GtkTextView would otherwise
+        // insert a newline before we ever see it.
+        let key = gtk::EventControllerKey::new();
+        key.set_propagation_phase(gtk::PropagationPhase::Capture);
+        key.connect_key_pressed(move |_, k, _, state| {
+            let ctrl = state.contains(gdk::ModifierType::CONTROL_MASK);
+            if ctrl && matches!(k, gdk::Key::Return | gdk::Key::KP_Enter | gdk::Key::ISO_Enter) {
+                commit();
+                return glib::Propagation::Stop;
+            }
+            glib::Propagation::Proceed
+        });
+        view.add_controller(key);
+    }
+
     /// Brings the new-entry field into view, however many entries are above it.
     fn reveal_add_field(self: &Rc<Self>) {
-        let Some(point) = self
-            .add
-            .compute_point(&self.scroll, &gtk::graphene::Point::new(0.0, 0.0))
+        self.reveal_area(self.add.upcast_ref(), 0, self.add.height());
+    }
+
+    /// Keeps the caret of the focused editor in view. The editors here grow
+    /// with their text rather than scrolling themselves, so a long entry would
+    /// otherwise push the line being typed off the bottom of the window.
+    fn reveal_focused_cursor(&self) {
+        let Some(view) = gtk::prelude::GtkWindowExt::focus(&self.window)
+            .and_then(|w| w.downcast::<sourceview5::View>().ok())
+        else {
+            return;
+        };
+        let buffer = view.buffer();
+        let rect = view.iter_location(&buffer.iter_at_mark(&buffer.get_insert()));
+        let (_, y) = view.buffer_to_window_coords(gtk::TextWindowType::Widget, 0, rect.y());
+        // A little of the line below too, or the caret sits flush on the edge.
+        self.reveal_area(view.upcast_ref(), y, rect.height() + 12);
+    }
+
+    /// Scrolls just enough to show `height` pixels of `widget` from `y` down.
+    fn reveal_area(&self, widget: &gtk::Widget, y: i32, height: i32) {
+        let Some(point) =
+            widget.compute_point(&self.scroll, &gtk::graphene::Point::new(0.0, y as f32))
         else {
             return;
         };
         let y = f64::from(point.y());
         let adj = self.scroll.vadjustment();
-        let height = f64::from(self.add.height());
+        let height = f64::from(height);
         let page = adj.page_size();
         // y is relative to the viewport, so it is negative above the visible
         // area and past `page` below it.
@@ -368,11 +462,12 @@ impl QuickNote {
         self.write(&body);
     }
 
+    /// Writes an entry's edited source back in its place; emptied, it goes.
     fn edit_entry(self: &Rc<Self>, block: &Block, text: &str) {
         let body = if text.trim().is_empty() {
             blocks::remove_block(&self.body(), block)
         } else {
-            blocks::replace_block(&self.body(), block, text.trim())
+            blocks::replace_block(&self.body(), block, text.trim_end())
         };
         self.write(&body);
     }
@@ -424,14 +519,15 @@ impl QuickNote {
             return;
         }
 
+        let body = self.body();
         for block in entries {
-            self.list.append(&self.entry_row(block));
+            self.list.append(&self.entry_row(block, &body));
         }
     }
 
-    /// A row that swaps itself for an editable field when clicked, can be
-    /// dragged to reorder, and carries its own delete button.
-    fn entry_row(self: &Rc<Self>, block: Block) -> gtk::ListBoxRow {
+    /// A row that swaps itself for a small markdown editor when clicked, can
+    /// be dragged to reorder, and carries its own delete button.
+    fn entry_row(self: &Rc<Self>, block: Block, body: &str) -> gtk::ListBoxRow {
         let ord = block.ord;
 
         let stack = gtk::Stack::new();
@@ -442,19 +538,46 @@ impl QuickNote {
         handle.add_css_class("dim-label");
         handle.set_tooltip_text(Some(&gettext("Drag to reorder")));
 
-        let label = gtk::Label::new(None);
-        label.set_markup(&self.render(&block.text));
-        label.set_xalign(0.0);
-        label.set_wrap(true);
-        label.set_wrap_mode(gtk::pango::WrapMode::WordChar);
-        label.set_hexpand(true);
-        // Let a click on a link open it instead of starting an edit.
-        label.connect_activate_link(|label, uri| open_link(label, uri));
+        // A list entry shows its nested items indented under it.
+        let items = if block.kind == Kind::Bullet {
+            blocks::list_items(body, &block)
+        } else {
+            Vec::new()
+        };
+        let shown: Vec<(usize, String)> = if items.is_empty() {
+            vec![(0, self.render(&block.text))]
+        } else {
+            items
+                .iter()
+                .map(|i| match i.depth {
+                    0 => (0, self.render(&i.text)),
+                    d => (d, format!("{} {}", ["•", "◦", "▪"][d % 3], self.render(&i.text))),
+                })
+                .collect()
+        };
+        let text = gtk::Box::new(gtk::Orientation::Vertical, 2);
+        text.set_hexpand(true);
+        for (depth, markup) in shown {
+            let label = gtk::Label::new(None);
+            label.set_markup(&markup);
+            label.set_xalign(0.0);
+            label.set_wrap(true);
+            label.set_wrap_mode(gtk::pango::WrapMode::WordChar);
+            label.set_margin_start(depth as i32 * 16);
+            // Let a click on a link open it instead of starting an edit.
+            label.connect_activate_link(|label, uri| open_link(label, uri));
+            text.append(&label);
+        }
 
         let delete = gtk::Button::from_icon_name("user-trash-symbolic");
         delete.add_css_class("flat");
         delete.set_tooltip_text(Some(&gettext("Delete entry")));
         delete.set_valign(gtk::Align::Center);
+        {
+            let s = self.clone();
+            let block = block.clone();
+            delete.connect_clicked(move |_| s.delete_entry(&block));
+        }
 
         let display = gtk::Box::new(gtk::Orientation::Horizontal, 8);
         display.set_margin_top(6);
@@ -462,21 +585,35 @@ impl QuickNote {
         display.set_margin_start(8);
         display.set_margin_end(8);
         display.append(&handle);
-        display.append(&label);
+        display.append(&text);
         display.append(&delete);
 
         // --- edit mode ----------------------------------------------------
-        let entry = gtk::Entry::builder().text(&block.text).hexpand(true).build();
+        // The entry's source lines as written, in the main window's editor:
+        // Enter is a new line, Ctrl+Enter saves, Esc cancels.
+        let source = body
+            .lines()
+            .skip(block.line_start)
+            .take(block.line_end + 1 - block.line_start)
+            .collect::<Vec<_>>()
+            .join("\n");
+        let (view, buffer) = editor::build();
+        buffer.set_text(&source);
         {
             let s = self.clone();
-            entry_completion::attach(&entry, self.store.clone(), move || s.sync_issues());
+            let block = block.clone();
+            let buffer = buffer.clone();
+            self.wire_entry_editor(&view, move || {
+                s.edit_entry(&block, &editor::text(&buffer));
+                s.focus_add();
+            });
         }
         let edit = gtk::Box::new(gtk::Orientation::Horizontal, 8);
         edit.set_margin_top(6);
         edit.set_margin_bottom(6);
         edit.set_margin_start(8);
         edit.set_margin_end(8);
-        edit.append(&entry);
+        edit.append(&view);
 
         stack.add_named(&display, Some("display"));
         stack.add_named(&edit, Some("edit"));
@@ -484,51 +621,41 @@ impl QuickNote {
 
         let row = gtk::ListBoxRow::builder().child(&stack).activatable(true).build();
 
-        // Click to edit — but on the box *around* the label, not the label
-        // itself. GTK delivers to the target first, so a click on a link is
+        // Click to edit — but on the box *around* the labels, not the labels
+        // themselves. GTK delivers to the target first, so a click on a link is
         // claimed by the label's own link handling and never reaches here;
         // anything else bubbles up and starts an edit. With the gesture on the
         // label, it swallowed every click and links were dead.
         let click = gtk::GestureClick::new();
         {
             let stack = stack.clone();
-            let entry = entry.clone();
+            let view = view.clone();
+            let buffer = buffer.clone();
             click.connect_released(move |_, _, _, _| {
                 stack.set_visible_child_name("edit");
-                entry.grab_focus();
-                entry.select_region(-1, -1);
+                view.grab_focus();
+                buffer.place_cursor(&buffer.end_iter());
             });
         }
         display.add_controller(click);
 
+        // Esc reverts. Bubble phase, so an open completion popup closes first.
+        let cancel = gtk::EventControllerKey::new();
         {
             let s = self.clone();
-            let block = block.clone();
-            delete.connect_clicked(move |_| s.delete_entry(&block));
-        }
-
-        // Enter commits.
-        {
-            let s = self.clone();
-            let block = block.clone();
-            entry.connect_activate(move |e| s.edit_entry(&block, &e.text()));
-        }
-        // Esc reverts.
-        let key = gtk::EventControllerKey::new();
-        {
             let stack = stack.clone();
-            let original = block.text.clone();
-            let entry = entry.clone();
-            key.connect_key_pressed(move |_, k, _, _| {
+            let buffer = buffer.clone();
+            cancel.connect_key_pressed(move |_, k, _, _| {
                 if k == gdk::Key::Escape {
-                    entry.set_text(&original);
+                    buffer.set_text(&source);
                     stack.set_visible_child_name("display");
+                    s.focus_add();
                     return glib::Propagation::Stop;
                 }
                 glib::Propagation::Proceed
             });
         }
-        entry.add_controller(key);
+        view.add_controller(cancel);
 
         // --- drag to reorder ---------------------------------------------
         // The payload is the block's position, which is all move_block needs.

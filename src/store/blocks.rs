@@ -360,12 +360,11 @@ mod tests {
     }
 }
 
-/// Rewrites the lines a block occupies, keeping the original list marker.
+/// Puts `new_text` — markdown source, markers and all — in place of the
+/// lines a block occupies.
 ///
-/// Quick Note edits one entry at a time; the rest of the day — including
-/// whatever indentation and marker style was used — must survive untouched.
-/// A block that spanned continuation lines collapses to a single line, which
-/// is what the user sees and edits in the compact view.
+/// Quick Note edits one entry at a time; the rest of the day must survive
+/// untouched.
 pub fn replace_block(body: &str, block: &Block, new_text: &str) -> String {
     let lines: Vec<&str> = body.lines().collect();
     if block.line_start >= lines.len() {
@@ -373,19 +372,9 @@ pub fn replace_block(body: &str, block: &Block, new_text: &str) -> String {
     }
     let end = block.line_end.min(lines.len() - 1);
 
-    let first = lines[block.line_start];
-    let prefix = match block.kind {
-        // Reuse the exact marker, e.g. "  - ", "* ", "1. ".
-        Kind::Bullet => bullet_marker_len(first)
-            .map(|n| &first[..n])
-            .unwrap_or("- "),
-        Kind::Heading => heading_len(first).map(|n| &first[..n]).unwrap_or("# "),
-        _ => "",
-    };
-
-    let mut out: Vec<String> = lines[..block.line_start].iter().map(|s| s.to_string()).collect();
-    out.push(format!("{prefix}{new_text}"));
-    out.extend(lines[end + 1..].iter().map(|s| s.to_string()));
+    let mut out: Vec<&str> = lines[..block.line_start].to_vec();
+    out.extend(new_text.lines());
+    out.extend_from_slice(&lines[end + 1..]);
 
     let mut joined = out.join("\n");
     if body.ends_with('\n') {
@@ -410,8 +399,11 @@ pub fn remove_block(body: &str, block: &Block) -> String {
     joined
 }
 
-/// Appends a new list item, matching the marker style already in use.
+/// Appends a new entry. Plain text becomes a list item, matching the marker
+/// style already in use; source that already starts with structure — a list
+/// item, a heading, a fence — goes in as written.
 pub fn append_entry(body: &str, text: &str) -> String {
+    let structured = parse(text).first().is_some_and(|b| b.kind != Kind::Para);
     // Follow whatever marker the day already uses rather than imposing "-".
     let marker = parse(body)
         .iter()
@@ -426,12 +418,13 @@ pub fn append_entry(body: &str, text: &str) -> String {
         // An ordered list would need renumbering, so only reuse simple markers.
         .filter(|m| m.trim_start().starts_with(['-', '*', '+']))
         .unwrap_or_else(|| "- ".to_string());
+    let marker = if structured { "" } else { &marker };
 
     let mut out = body.to_string();
     if !out.is_empty() && !out.ends_with('\n') {
         out.push('\n');
     }
-    out.push_str(&marker);
+    out.push_str(marker);
     out.push_str(text);
     out.push('\n');
     out
@@ -446,17 +439,20 @@ mod edit_tests {
     }
 
     #[test]
-    fn replace_keeps_the_original_marker_and_indent() {
+    fn replace_puts_the_source_in_as_written() {
         let body = "  * first\n  * second\n";
         let b = block_at(body, 1);
-        assert_eq!(replace_block(body, &b, "changed"), "  * first\n  * changed\n");
+        assert_eq!(replace_block(body, &b, "  * changed"), "  * first\n  * changed\n");
     }
 
     #[test]
-    fn replace_collapses_a_multiline_entry() {
+    fn replace_can_reshape_an_entry_into_a_nested_list() {
         let body = "- one\n  continued\n- two\n";
         let b = block_at(body, 0);
-        assert_eq!(replace_block(body, &b, "one, edited"), "- one, edited\n- two\n");
+        assert_eq!(
+            replace_block(body, &b, "- one\n  - sub\n    - deeper"),
+            "- one\n  - sub\n    - deeper\n- two\n"
+        );
     }
 
     #[test]
@@ -464,7 +460,7 @@ mod edit_tests {
         let body = "## Heading\n\n- a\n- b\n\nsome prose\n";
         let b = block_at(body, 2); // the "- b" bullet
         assert_eq!(
-            replace_block(body, &b, "b!"),
+            replace_block(body, &b, "- b!"),
             "## Heading\n\n- a\n- b!\n\nsome prose\n"
         );
     }
@@ -485,6 +481,15 @@ mod edit_tests {
         assert_eq!(append_entry("", "first"), "- first\n");
         // no trailing newline in the source must not glue the lines together
         assert_eq!(append_entry("- a", "b"), "- a\n- b\n");
+    }
+
+    #[test]
+    fn append_takes_multiline_source() {
+        // Plain text gets a marker; what follows it is kept as written.
+        assert_eq!(append_entry("- a\n", "b\n  - c"), "- a\n- b\n  - c\n");
+        // Source that is already a list item or heading is not marked again.
+        assert_eq!(append_entry("- a\n", "* b\n  * c"), "- a\n* b\n  * c\n");
+        assert_eq!(append_entry("- a\n", "## Later"), "- a\n## Later\n");
     }
 
     #[test]
